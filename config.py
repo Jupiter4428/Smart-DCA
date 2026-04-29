@@ -3,6 +3,11 @@
 =====================================
 All portfolio targets, current holdings, and DCA strategy defined here.
 Modify this file to update your portfolio settings.
+
+หมายเหตุ GLD → MTS-GOLD:
+    MTS Gold ไม่มีใน yfinance → ระบบใช้ราคา GLD (USD/troy oz) × ปริมาณทองแทน
+    ตั้งค่า MTS_GOLD_OZ = จำนวน troy oz ทองที่ถือ
+    มูลค่า (USD) = MTS_GOLD_OZ × GLD_price_per_oz
 """
 
 from datetime import date
@@ -41,6 +46,16 @@ CURRENT_HOLDINGS_SHARES = {
     'RGTI' : 0.0,
     'QBTS' : 0.0,
 }
+
+# ── ทองคำ MTS-Gold ──────────────────────────────────────────────
+# MTS-GOLD ซื้อขายเป็น troy oz, ราคาอ้างอิง GLD (troy oz) จาก yfinance
+# มูลค่า (USD) = MTS_GOLD_OZ × GLD_price_per_troy_oz
+MTS_GOLD_OZ = 0.0   # ✏️  ใส่จำนวน troy oz ทองที่ถือใน MTS-Gold
+                     #     1 troy oz = 31.1035 กรัม
+                     #     ตัวอย่าง: ทอง 5 กรัม = 5 / 31.1035 ≈ 0.1608 oz
+
+# ── Validation ──────────────────────────────────────────────────
+assert MTS_GOLD_OZ >= 0, "MTS_GOLD_OZ ต้องเป็นค่า >= 0"
 
 # ═══════════════════════════════════════════════════════════════════
 # 📊 DCA STRATEGY SETTINGS

@@ -1,17 +1,23 @@
 project_DCA/
 ├── run.py                 # 🚀 Entry Point — รันระบบวิเคราะห์พอร์ตทั้งหมด
-│                          #    flags: (default) ใช้ disk cache / --clear-cache ลบ cache แล้ว download ใหม่ / --no-cache ข้าม cache รอบนี้
+│                          #    flags: (default) ใช้ disk cache / --clear-cache ลบ cache แล้ว download ใหม่
+│                          #           --no-cache ข้าม cache รอบนี้ / --no-record ข้ามบันทึก history
 ├── config.py              # ⚙️ ตั้งค่าทั้งหมดของระบบ
-│                          #    - TARGET_PORTFOLIO: สัดส่วนเป้าหมาย 11 หุ้น (MSFT 18%, GOOGL 14%, NVDA 6%, ASML 12%, TSM 12%, GLD 13%, JNJ 5%, PG 5%, CVX 4%, RGTI 6%, QBTS 5%)
-│                          #    - CURRENT_HOLDINGS: มูลค่าถือครองปัจจุบัน (USD)
-│                          #    - CURRENT_PORTFOLIO_VALUE_USD: คำนวณอัตโนมัติจาก sum(CURRENT_HOLDINGS)
+│                          #    - TARGET_PORTFOLIO: สัดส่วนเป้าหมาย 11 หุ้น
+│                          #      (MSFT 18%, GOOGL 14%, NVDA 6%, ASML 12%, TSM 12%,
+│                          #       GLD 13%, JNJ 5%, PG 5%, CVX 4%, RGTI 6%, QBTS 5%)
+│                          #    - CURRENT_HOLDINGS_SHARES: จำนวนหุ้นที่ถือครอง (shares)
+│                          #      ระบบดึงราคาล่าสุดจาก yfinance แล้วคำนวณมูลค่า USD อัตโนมัติ
+│                          #    - MTS_GOLD_GRAMS: จำนวนกรัมทองคำ MTS-Gold ที่ถือครอง
+│                          #      (GLD ใน TARGET_PORTFOLIO = proxy ราคาสำหรับ MTS-Gold)
+│                          #    - TROY_OZ_TO_GRAM: 31.1035 (ค่าคงที่แปลง oz → กรัม)
 │                          #    - MONTHLY_DCA_BUDGET_USD: งบ DCA ต่อเดือน (USD)
 │                          #    - ANNUAL_GROWTH_TARGET: เป้าหมายเติบโต 12% ต่อปี
-│                          #    - REMAINING_MONTHS: เดือนที่เหลือในปี
+│                          #    - REMAINING_MONTHS: เดือนที่เหลือในปี (คำนวณอัตโนมัติ)
 │                          #    - RSI_PERIOD/OVERSOLD/OVERBOUGHT, MACD_FAST/SLOW/SIGNAL, DATA_PERIOD
 │                          #    - REBALANCE_TOLERANCE, DEFAULT_EXCHANGE_RATE, EXCHANGE_RATE_TIMEOUT
 ├── requirements.txt       # 📋 Library ที่ใช้งาน
-│                          #    หลัก: pandas, numpy, yfinance, openpyxl, requests, rich
+│                          #    หลัก: pandas, numpy, yfinance, openpyxl, matplotlib, requests, rich
 ├── .venv/                 # 📦 Virtual Environment
 │   ├── Include/
 │   ├── Lib/
@@ -22,7 +28,7 @@ project_DCA/
 │   └── cache/             #    ไฟล์ CSV ราคาหุ้นที่ download จาก yfinance
 │       ├── ASML_12mo.csv
 │       ├── CVX_12mo.csv
-│       ├── GLD_12mo.csv
+│       ├── GLD_12mo.csv  #    ← ใช้เป็น proxy ราคาสำหรับ MTS-Gold ด้วย
 │       ├── GOOGL_12mo.csv
 │       ├── JNJ_12mo.csv
 │       ├── MSFT_12mo.csv
@@ -30,9 +36,12 @@ project_DCA/
 │       ├── PG_12mo.csv
 │       ├── QBTS_12mo.csv
 │       ├── RGTI_12mo.csv
-│       └── TSM_12mo.csv   #    Cache valid = ไฟล์มีอยู่ + modified date ตรงกับวันนี้
+│       └── TSM_12mo.csv  #    Cache valid = ไฟล์มีอยู่ + modified date ตรงกับวันนี้
 ├── reports/               # 📊 โฟลเดอร์เก็บผลลัพธ์ (สร้างอัตโนมัติ)
-│   └── Master_Portfolio_Report.xlsx  # Excel 4 sheets: Summary, Holdings, DCA_Action, Technical
+│   ├── Master_Portfolio_Report.xlsx  # Excel 4 sheets: Summary, Holdings, DCA_Action, Technical
+│   ├── portfolio_history.csv         # Snapshot รายวัน: date, total_usd, total_thb, rate,
+│   │                                 #   monthly_dca_usd, gold_grams, <SYMBOL_USD>...
+│   └── portfolio_performance.png     # Chart: Portfolio Value / Holdings Breakdown / DCA Budget
 └── src/                   # 🧠 Source Code หลัก
     ├── __init__.py        # ทำให้ Python มองโฟลเดอร์นี้เป็น Package
     ├── indicators.py      # 📈 Technical Indicators + Disk Cache Manager
@@ -54,12 +63,19 @@ project_DCA/
     │                      #    - format_percentage(value): จัดรูปแบบเปอร์เซ็นต์
     │                      #    - get_status_indicator(diff_pct, tolerance): คืน On Target / OVERWEIGHT / UNDERWEIGHT
     │                      #    - print_section / print_subsection: print header สวยงาม
-    └── output.py          # 📊 Console & Excel Report Generator
-                           #    - get_cached_indicators(symbol): ดึง indicators พร้อม in-memory cache (ลด API call)
-                           #    - print_cache_summary(): แสดงสรุป cache hit/miss เป็นบรรทัดเดียว
-                           #    - generate_portfolio_summary(rate): ตาราง metrics ภาพรวม (USD/THB)
-                           #    - generate_holdings_report(rate): ตาราง current vs target allocation
-                           #    - generate_dca_action_report(rate): ตาราง DCA recommendation + action signal
-                           #    - generate_technical_report(): ตาราง RSI, MACD, Signal ทุกหุ้น
-                           #    - print_reports_to_console(rate): แสดงรายงานทั้งหมดใน terminal
-                           #    - save_all_to_excel(rate, output_dir): บันทึก Excel 4 sheets พร้อม color highlight
+    ├── output.py          # 📊 Console & Excel Report Generator
+    │                      #    - _get_current_holdings_usd(): คำนวณมูลค่า USD จาก shares × latest_price
+    │                      #      (GLD → MTS-Gold proxy: grams / 31.1035 × GLD_price_per_oz)
+    │                      #    - get_cached_indicators(symbol): ดึง indicators พร้อม in-memory cache
+    │                      #    - print_cache_summary(): แสดงสรุป cache hit/miss เป็นบรรทัดเดียว
+    │                      #    - generate_portfolio_summary(rate): ตาราง metrics ภาพรวม + gold_grams
+    │                      #    - generate_holdings_report(rate): ตาราง shares/กรัม, ราคา, current vs target
+    │                      #    - generate_dca_action_report(rate): ตาราง DCA recommendation + action signal
+    │                      #    - generate_technical_report(): ตาราง RSI, MACD, Signal ทุกหุ้น
+    │                      #    - print_reports_to_console(rate): แสดงรายงานทั้งหมดใน terminal
+    │                      #    - save_all_to_excel(rate, output_dir): บันทึก Excel 4 sheets พร้อม color highlight
+    │                      #    - append_performance_history(rate): บันทึก snapshot รายวัน → portfolio_history.csv
+    └── visualize.py       # 📈 Performance Chart Generator
+                           #    - visualize_performance_history(): อ่าน portfolio_history.csv
+                           #      สร้าง 3-panel chart: Total Value / Holdings Breakdown / DCA Budget
+                           #      บันทึกเป็น reports/portfolio_performance.png

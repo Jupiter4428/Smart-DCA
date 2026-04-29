@@ -4,17 +4,20 @@
 Run this file to execute the full portfolio analysis pipeline.
 
 Usage:
-    python run.py                 # รันปกติ (ใช้ cache ถ้ามี)
+    python run.py                 # รันปกติ (ใช้ disk cache ถ้ามี)
     python run.py --clear-cache   # ลบ cache ทั้งหมดแล้ว download ใหม่
     python run.py --no-cache      # ข้าม cache ครั้งนี้ (ไม่ลบ ไม่บันทึก)
     python run.py --no-record     # ข้ามการบันทึก performance history
+    python run.py --dry-run       # แสดงผลใน console เท่านั้น ไม่บันทึกไฟล์ใดเลย
 """
 
 import sys
 from src.utils import get_thb_usd_rate, validate_portfolio_weights
 from src.output import (
-    print_reports_to_console, save_all_to_excel,
-    clear_indicator_cache, append_performance_history
+    print_reports_to_console,
+    save_all_to_excel,
+    clear_indicator_cache,
+    append_performance_history,
 )
 from src.indicators import clear_disk_cache
 from src.visualize import visualize_performance_history
@@ -24,10 +27,14 @@ if __name__ == "__main__":
     print("🚀 Starting Portfolio Analysis System...")
 
     # ── Parse CLI flags ──
-    args = sys.argv[1:]
+    args               = sys.argv[1:]
     should_clear_cache = "--clear-cache" in args
     no_cache           = "--no-cache"    in args
     no_record          = "--no-record"   in args
+    dry_run            = "--dry-run"     in args
+
+    if dry_run:
+        print("🧪 DRY RUN MODE — no files will be written")
 
     # ── Validate portfolio weights ──
     try:
@@ -38,11 +45,11 @@ if __name__ == "__main__":
         raise SystemExit(1)
 
     # ── Handle cache flags ──
-    if should_clear_cache:
+    if should_clear_cache and not dry_run:
         clear_disk_cache()
         clear_indicator_cache()
         print("🔄 Cache cleared — will download fresh data from yfinance")
-    elif no_cache:
+    elif no_cache or dry_run:
         clear_indicator_cache()
         print("⚡ No-cache mode — using live data this run (disk cache unchanged)")
     else:
@@ -53,17 +60,20 @@ if __name__ == "__main__":
     rate = get_thb_usd_rate()
     print(f"💱 Exchange rate: 1 USD = ฿{rate:.2f}")
 
-    # ── Generate reports ──
+    # ── Generate & display reports (always) ──
     print_reports_to_console(rate)
-    save_all_to_excel(rate)
 
-    # ── Record performance snapshot ──
-    if no_record:
-        print("⏭️  Skipping performance history recording (--no-record)")
+    # ── Write files (skip in dry-run) ──
+    if dry_run:
+        print("\n⏭️  Skipped: Excel / history / chart (dry-run mode)")
     else:
-        append_performance_history(rate)
+        save_all_to_excel(rate)
 
-    # ── Visualize performance history ──
-    visualize_performance_history()
+        if no_record:
+            print("⏭️  Skipping performance history recording (--no-record)")
+        else:
+            append_performance_history(rate)
+
+        visualize_performance_history()
 
     print("\n✨ All tasks completed successfully!")
