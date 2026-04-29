@@ -2,19 +2,11 @@
 📊 OUTPUT & REPORTING
 =====================
 Console and Excel report generation for the DCA Portfolio System.
-
-การเปลี่ยนแปลงหลัก:
-  1. รองรับ CURRENT_HOLDINGS_SHARES (จำนวนหุ้น) → มูลค่า = shares × latest_price
-  2. รองรับ MTS-GOLD: มูลค่า = MTS_GOLD_OZ × GC=F_price_per_troy_oz
-  3. แก้ bug Price (USD) ใน Holdings — ดึงจาก get_cached_indicators() โดยตรง
-  4. เพิ่ม GC=F label เป็น 'GC=F (MTS-Gold)' ใน legend ทุก report
-  5. เพิ่ม print_action_alerts() — สรุป STRONG BUY / SELL ท้าย console
 """
 
 import pandas as pd
 import os
 import csv
-import numpy as np
 from datetime import datetime
 from openpyxl.styles import PatternFill, Font
 from openpyxl.utils import get_column_letter
@@ -23,18 +15,36 @@ from config import (
     TARGET_PORTFOLIO,
     CURRENT_HOLDINGS_SHARES,
     MTS_GOLD_OZ,
-    ANNUAL_GROWTH_TARGET,
     MONTHLY_DCA_BUDGET_USD,
     REMAINING_MONTHS,
     REBALANCE_TOLERANCE,
-    RSI_OVERSOLD,      # <-- เพิ่มบรรทัดนี้
-    RSI_OVERBOUGHT,    # <-- เพิ่มบรรทัดนี้
+    RSI_OVERSOLD,
+    RSI_OVERBOUGHT,
+    AVERAGE_COST_USD,
 )
 
-from src.indicators import download_historical_data, calculate_rsi, calculate_macd
+from src.indicators import download_historical_data, calculate_rsi, calculate_macd, calculate_historical_growth
 from src.utils import get_status_indicator
 from src.portfolio import get_action_signal, calculate_rebalance_factors
+import yfinance as yf
 
+# ─────────────────────────────────────────────────────────────────
+# 🔍 P/E Ratio Fetcher
+# ─────────────────────────────────────────────────────────────────
+PE_CACHE = {}
+def get_cached_pe(symbol):
+    """ดึงค่า P/E Ratio ปัจจุบันจาก Yahoo Finance"""
+    if symbol in PE_CACHE:
+        return PE_CACHE[symbol]
+    if symbol in ['GC=F', 'GLD', 'RGTI', 'QBTS', 'BITO', 'IBIT']: 
+        PE_CACHE[symbol] = "N/A"
+        return "N/A"
+    try:
+        pe = yf.Ticker(symbol).info.get('trailingPE', "N/A")
+        PE_CACHE[symbol] = round(pe, 2) if isinstance(pe, (float, int)) else "N/A"
+    except:
+        PE_CACHE[symbol] = "N/A"
+    return PE_CACHE[symbol]
 
 # ─────────────────────────────────────────────────────────────────
 # In-Memory Indicator Cache
@@ -43,13 +53,8 @@ _indicator_cache: dict = {}
 _cache_hits:   list[str] = []
 _cache_misses: list[str] = []
 
-
 def get_cached_indicators(symbol: str) -> dict | None:
-    """
-    Return cached technical indicators for a symbol.
-    Downloads from yfinance only on first call per session.
-    GC=F ถูกใช้เป็น proxy ราคาสำหรับ MTS-GOLD
-    """
+    """Return cached technical indicators for a symbol."""
     if symbol not in _indicator_cache:
         from src.indicators import _is_cache_valid, _get_cache_path
         from config import DATA_PERIOD
@@ -61,8 +66,7 @@ def get_cached_indicators(symbol: str) -> dict | None:
             _indicator_cache[symbol] = None
         else:
             close = df['Close'].squeeze()
-            rsi_series, signal_series = calculate_rsi(close), None
-            rsi_series  = calculate_rsi(close)
+            rsi_series = calculate_rsi(close)
             macd_series, signal_series = calculate_macd(close)
 
             latest_rsi = rsi_series.iloc[-1]
@@ -84,43 +88,26 @@ def get_cached_indicators(symbol: str) -> dict | None:
 
     return _indicator_cache[symbol]
 
-
 def print_cache_summary() -> None:
-    """แสดงสรุป cache status เป็นบรรทัดเดียว"""
     if _cache_hits:
         print(f"📂 Cache hit : {', '.join(_cache_hits)}")
     if _cache_misses:
         print(f"🌐 Downloaded: {', '.join(_cache_misses)}")
 
-
 def clear_indicator_cache() -> None:
-    """Clear in-memory indicator cache and hit/miss tracking."""
     _indicator_cache.clear()
     _cache_hits.clear()
     _cache_misses.clear()
 
-
 # ─────────────────────────────────────────────────────────────────
-# Portfolio Value Calculation (shares × price)
+# Portfolio Value Calculation
 # ─────────────────────────────────────────────────────────────────
 
 def _display_name(symbol: str) -> str:
-    """Return display label for a symbol."""
     return f"{symbol} (MTS-Gold)" if symbol == 'GC=F' else symbol
 
-
 def _get_current_holdings_usd() -> dict[str, float]:
-    """
-    คำนวณมูลค่าปัจจุบันทุก symbol เป็น USD
-
-    - หุ้นทั่วไป : shares × latest_price (USD)
-    - GC=F (MTS-GOLD) : MTS_GOLD_OZ × GC=F_price_per_troy_oz
-
-    Returns:
-        dict {symbol: value_usd}
-    """
     holdings_usd: dict[str, float] = {}
-
     for symbol in TARGET_PORTFOLIO:
         if symbol == 'GC=F':
             ind = get_cached_indicators('GC=F')
@@ -132,103 +119,113 @@ def _get_current_holdings_usd() -> dict[str, float]:
                 holdings_usd[symbol] = shares * (ind['price'] if ind else 0.0)
             else:
                 holdings_usd[symbol] = 0.0
-
     return holdings_usd
-
 
 def _get_total_portfolio_usd(holdings_usd: dict[str, float]) -> float:
     return sum(holdings_usd.values())
-
 
 # ─────────────────────────────────────────────────────────────────
 # Report Generators
 # ─────────────────────────────────────────────────────────────────
 
 def generate_portfolio_summary(rate: float) -> pd.DataFrame:
-    """Generate high-level portfolio metrics (USD primary, THB secondary)."""
     holdings_usd = _get_current_holdings_usd()
     total_usd    = _get_total_portfolio_usd(holdings_usd)
     total_thb    = total_usd * rate
 
-    target_end_usd = total_usd * (1 + ANNUAL_GROWTH_TARGET)
-    target_end_thb = target_end_usd * rate
-    req_dca_usd    = (target_end_usd - total_usd) / REMAINING_MONTHS
-    budget_thb     = MONTHLY_DCA_BUDGET_USD * rate
+    total_weighted_growth = 0.0
+    for symbol, target_pct in TARGET_PORTFOLIO.items():
+        ind = get_cached_indicators(symbol)
+        if ind and 'df' in ind:
+            df = ind['df']
+            if len(df) >= 2:
+                start_price = df['Close'].iloc[0]
+                end_price = df['Close'].iloc[-1]
+                historical_growth = (end_price - start_price) / start_price
+                total_weighted_growth += (historical_growth * (target_pct / 100))
 
-    # Gold display
-    gcf_ind       = get_cached_indicators('GC=F')
+    dynamic_annual_target = total_weighted_growth if total_weighted_growth != 0 else 0.12
+    monthly_rate = dynamic_annual_target / 12
+
+    fv_current = total_usd * ((1 + monthly_rate) ** REMAINING_MONTHS)
+    fv_dca = MONTHLY_DCA_BUDGET_USD * (((1 + monthly_rate) ** REMAINING_MONTHS - 1) / monthly_rate)
+    target_end_usd = fv_current + fv_dca
+    target_end_thb = target_end_usd * rate
+
+    denominator = (((1 + monthly_rate) ** REMAINING_MONTHS - 1) / monthly_rate)
+    req_dca_usd = (target_end_usd - fv_current) / denominator
+
+    gcf_ind = get_cached_indicators('GC=F')
     gcf_price_str = f"${gcf_ind['price']:,.2f}/oz" if gcf_ind else "N/A"
-    gold_usd      = holdings_usd.get('GC=F', 0.0)
+    gold_usd = holdings_usd.get('GC=F', 0.0)
 
     data = {
         'Metric': [
             'Timestamp',
             'Total Portfolio Value (USD / THB)',
             'Exchange Rate (THB/USD)',
-            'Annual Growth Target',
+            'Dynamic Annual Growth Target (Based on History)',
             'Monthly DCA Budget (USD / THB)',
             'Remaining Months',
             'Target End Year Value (USD / THB)',
             'Required Monthly DCA (USD / THB)',
-            'Gold Holdings (MTS-Gold)',
+            'Gold Holdings',
         ],
         'Value': [
             datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             f"${total_usd:,.2f}  /  ฿{total_thb:,.2f}",
             f"{rate:.2f}",
-            f"{ANNUAL_GROWTH_TARGET * 100:.1f}%",
-            f"${MONTHLY_DCA_BUDGET_USD:,.2f}  /  ฿{budget_thb:,.2f}",
+            f"{dynamic_annual_target * 100:.2f}%",
+            f"${MONTHLY_DCA_BUDGET_USD:,.2f}  /  ฿{MONTHLY_DCA_BUDGET_USD * rate:,.2f}",
             REMAINING_MONTHS,
             f"${target_end_usd:,.2f}  /  ฿{target_end_thb:,.2f}",
             f"${req_dca_usd:,.2f}  /  ฿{req_dca_usd * rate:,.2f}",
-            f"{MTS_GOLD_OZ:.6f} oz  ({MTS_GOLD_OZ * 31.1035:.4f} g)  |  {gcf_price_str}  |  ${gold_usd:,.2f}",
+            f"{MTS_GOLD_OZ:.6f} oz  |  {gcf_price_str}  |  ${gold_usd:,.2f}",
         ]
     }
     return pd.DataFrame(data)
 
-
 def generate_holdings_report(rate: float) -> pd.DataFrame:
-    """Generate current allocation vs target report."""
     holdings_usd = _get_current_holdings_usd()
     total_usd    = _get_total_portfolio_usd(holdings_usd)
 
     rows = []
     for symbol, target_pct in TARGET_PORTFOLIO.items():
         val_usd = holdings_usd.get(symbol, 0.0)
-        val_thb = val_usd * rate
         pct     = (val_usd / total_usd * 100) if total_usd > 0 else 0.0
         diff    = pct - target_pct
         status, _ = get_status_indicator(diff, REBALANCE_TOLERANCE)
 
-        # ── Price: ดึงจาก cache โดยตรง (แก้ bug เดิม) ──
         ind = get_cached_indicators(symbol)
-        if ind:
-            price_str = f"${ind['price']:,.2f}" + (" /oz" if symbol == 'GC=F' else "")
-        else:
-            price_str = "N/A"
+        price_str = f"${ind['price']:,.2f}" if ind else "N/A"
 
-        # ── Units display ──
-        if symbol == 'GC=F':
-            units_str = f"{MTS_GOLD_OZ:.6f} oz ({MTS_GOLD_OZ * 31.1035:.4f} g)"
+        avg_cost = AVERAGE_COST_USD.get(symbol, 0.0)
+        if symbol == 'GC=F' or symbol == 'GLD':
+            units = MTS_GOLD_OZ
+            units_str = f"{units:.6f} oz"
         else:
-            units_str = f"{CURRENT_HOLDINGS_SHARES.get(symbol, 0.0):.7f} shares"
+            units = CURRENT_HOLDINGS_SHARES.get(symbol, 0.0)
+            units_str = f"{units:.7f} shares"
+            
+        total_cost_usd = units * avg_cost
+        pnl_usd = val_usd - total_cost_usd
+        pnl_pct = (pnl_usd / total_cost_usd) * 100 if total_cost_usd > 0 else 0.0
+        pnl_str = f"${pnl_usd:,.2f} ({pnl_pct:+.2f}%)" if units > 0 else "N/A"
 
         rows.append({
             'Symbol'       : _display_name(symbol),
             'Units'        : units_str,
+            'Avg Cost($)'  : f"${avg_cost:,.2f}" if avg_cost > 0 else "-",
             'Price (USD)'  : price_str,
-            'Current (USD)': val_usd,
-            'Current (THB)': val_thb,
-            'Current %'    : f"{pct:.2f}%",
-            'Target %'     : f"{target_pct:.2f}%",
-            'Diff %'       : f"{diff:+.2f}%",
+            'P&L (USD)'    : pnl_str,
+            'Current (USD)': round(val_usd, 2),
+            'Curr %'       : f"{pct:.2f}%",
+            'Tgt %'        : f"{target_pct:.2f}%",
             'Status'       : status,
         })
     return pd.DataFrame(rows)
 
-
 def generate_dca_action_report(rate: float) -> pd.DataFrame:
-    """Generate tactical DCA recommendations."""
     holdings_usd = _get_current_holdings_usd()
     total_usd    = _get_total_portfolio_usd(holdings_usd)
 
@@ -239,78 +236,73 @@ def generate_dca_action_report(rate: float) -> pd.DataFrame:
         exchange_rate    = 1.0,
     )
 
+    symbol_actions = {}
+    for symbol, target_pct in TARGET_PORTFOLIO.items():
+        ind = get_cached_indicators(symbol)
+        rsi = ind['rsi'] if ind else None
+        pe_val = get_cached_pe(symbol)
+        curr_pct = (holdings_usd.get(symbol, 0.0) / total_usd * 100) if total_usd > 0 else 0.0
+        action, reason = get_action_signal(symbol, curr_pct, target_pct, rsi, pe_val)
+        symbol_actions[symbol] = {'action': action, 'reason': reason, 'rsi': rsi, 'ind': ind}
+
+    eligible_symbols = [sym for sym, data in symbol_actions.items() if "HOLD" not in data['action'] and "SKIP" not in data['action']]
+    eligible_factors_sum = sum(rebalance_factors[sym] for sym in eligible_symbols)
+    
+    allocations_usd = {}
+    if eligible_factors_sum > 0:
+        for sym in eligible_symbols:
+            allocations_usd[sym] = MONTHLY_DCA_BUDGET_USD * (rebalance_factors[sym] / eligible_factors_sum)
+
     rows = []
     total_tactical_usd = 0.0
 
     for symbol, target_pct in TARGET_PORTFOLIO.items():
-        adj_budget = MONTHLY_DCA_BUDGET_USD * rebalance_factors[symbol]
-
-        ind = get_cached_indicators(symbol)
-        rsi = ind['rsi'] if ind else None
-
-        if rsi is not None and rsi >= RSI_OVERBOUGHT:
-            mul = 0.20
-        elif rsi is not None and rsi <= RSI_OVERSOLD:
-            mul = 1.50
-        elif rsi is not None:
-            mul = float(np.clip((100 - rsi) / 50, 0.5, 1.5))
-        else:
-            mul = 1.0
-
-        final_usd = adj_budget * mul
+        data = symbol_actions[symbol]
+        ind = data['ind']
+        price_str = f"${ind['price']:,.2f}" if ind else "N/A"
+        final_usd = allocations_usd.get(symbol, 0.0)
         total_tactical_usd += final_usd
-
-        curr_pct = (holdings_usd.get(symbol, 0.0) / total_usd * 100) if total_usd > 0 else 0.0
-        action, reason = get_action_signal(curr_pct, target_pct, rsi)
 
         rows.append({
             'Symbol'       : _display_name(symbol),
-            'RSI'          : rsi,
+            'Price (USD)'  : price_str,
+            'RSI'          : data['rsi'],
             'DCA (USD)'    : final_usd,
             'DCA (THB)'    : final_usd * rate,
-            'Action Signal': action,
-            'Reason'       : reason,
+            'Action Signal': data['action'],
+            'Reason'       : data['reason'],
         })
 
-    remaining_usd = MONTHLY_DCA_BUDGET_USD - total_tactical_usd
+    remaining_usd = max(0.0, MONTHLY_DCA_BUDGET_USD - total_tactical_usd)
     df = pd.DataFrame(rows)
-    df.loc[len(df)] = [
-        'TOTAL', None,
-        total_tactical_usd, total_tactical_usd * rate,
-        'REMAINING CASH:', f"${remaining_usd:.2f} / ฿{remaining_usd * rate:.2f}"
-    ]
+    df.loc[len(df)] = ['TOTAL', 'N/A', None, total_tactical_usd, total_tactical_usd * rate, 'REMAINING CASH:', f"${remaining_usd:.2f} / ฿{remaining_usd * rate:.2f}"]
     return df
 
-
 def generate_technical_report() -> pd.DataFrame:
-    """Generate technical analysis summary (RSI, MACD, Signal)."""
+    """Generate technical analysis summary with P/E Ratio."""
     rows = []
     for symbol in TARGET_PORTFOLIO:
         ind = get_cached_indicators(symbol)
+        pe_val = get_cached_pe(symbol)
         if ind:
+            growth_rate = calculate_historical_growth(ind['df'])
             rows.append({
                 'Symbol'     : _display_name(symbol),
-                'Price (USD)': f"${ind['price']:,.2f}" + (" /oz" if symbol == 'GC=F' else ""),
+                'Price (USD)': f"${ind['price']:,.2f}",
+                'P/E Ratio'  : pe_val,
                 'RSI(14)'    : round(ind['rsi'], 2),
-                'RSI Signal' : ("Overbought" if ind['rsi'] > RSI_OVERBOUGHT
-                                else "Oversold" if ind['rsi'] < RSI_OVERSOLD
-                                else "Neutral"),
+                'RSI Signal' : ("Overbought" if ind['rsi'] > RSI_OVERBOUGHT else "Oversold" if ind['rsi'] < RSI_OVERSOLD else "Neutral"),
                 'MACD'       : round(ind['macd'], 4),
                 'Signal'     : round(ind['signal'], 4),
                 'MACD Signal': "Bullish 🟢" if ind['macd'] > ind['signal'] else "Bearish 🔴",
+                'Growth'     : f"{growth_rate*100:+.2f}%"
             })
     return pd.DataFrame(rows)
 
-
 # ─────────────────────────────────────────────────────────────────
-# ✅ ฟีเจอร์ใหม่: Action Alert Summary
+# ✅ Action Alert Summary
 # ─────────────────────────────────────────────────────────────────
-
-def print_action_alerts(rate: float) -> None:
-    """
-    แสดงสรุป STRONG BUY และ SELL ท้าย console
-    เรียกหลัง generate_dca_action_report() เพื่อใช้ cache ที่มีอยู่แล้ว
-    """
+def print_action_alerts(rate: float = 0) -> None:
     holdings_usd = _get_current_holdings_usd()
     total_usd    = _get_total_portfolio_usd(holdings_usd)
 
@@ -320,8 +312,9 @@ def print_action_alerts(rate: float) -> None:
     for symbol, target_pct in TARGET_PORTFOLIO.items():
         ind = get_cached_indicators(symbol)
         rsi = ind['rsi'] if ind else None
+        pe_val = get_cached_pe(symbol)
         curr_pct = (holdings_usd.get(symbol, 0.0) / total_usd * 100) if total_usd > 0 else 0.0
-        action, reason = get_action_signal(curr_pct, target_pct, rsi)
+        action, reason = get_action_signal(symbol, curr_pct, target_pct, rsi, pe_val)
 
         name = _display_name(symbol)
         rsi_str = f"RSI {rsi:.1f}" if rsi is not None else "RSI N/A"
@@ -331,9 +324,9 @@ def print_action_alerts(rate: float) -> None:
         elif "SELL" in action:
             sells.append(f"  {name:<22} {rsi_str}  — {reason}")
 
-    print("\n" + "=" * 100)
+    print("\n" + "=" * 140)
     print("🚨 ACTION ALERTS")
-    print("=" * 100)
+    print("=" * 140)
 
     if strong_buys:
         print("🟢🟢 STRONG BUY — Value Zone + Underweight:")
@@ -349,98 +342,53 @@ def print_action_alerts(rate: float) -> None:
     else:
         print("🔴  No SELL signals at this time.")
 
-    print("=" * 100)
-
+    print("=" * 140)
 
 # ─────────────────────────────────────────────────────────────────
 # Console & Excel Output
 # ─────────────────────────────────────────────────────────────────
 
-def print_reports_to_console(rate: float) -> None:
-    """Formatted terminal output of all reports with consistent table styles."""
-    
-    # ─────────────────────────────────────────────────────────────────
-    # 📋 1. PORTFOLIO SUMMARY (ปรับให้มี Header เหมือนตารางอื่น)
-    # ─────────────────────────────────────────────────────────────────
-    print("\n" + "=" * 100)
-    print("📊 PORTFOLIO ANALYSIS REPORT")
-    print("=" * 100)
-    print("\n📋 PORTFOLIO SUMMARY")
-    print("-" * 100)
-    summary_df = generate_portfolio_summary(rate)
-    for _, row in summary_df.iterrows():
-        print(f"{row['Metric']:.<60} {row['Value']}")
-
-    # ─────────────────────────────────────────────────────────────────
-    # 💰 2. HOLDINGS REPORT (ต้นแบบ)
-    # ─────────────────────────────────────────────────────────────────
-    print("\n💰 HOLDINGS REPORT")
-    print("-" * 125)
-    holdings_df = generate_holdings_report(rate)
-    print(
-        f"{'Symbol':<22}  {'Units':<28}  {'Price(USD)':<14}  "
-        f"{'Current(USD)':>12}  {'Current(THB)':>13}  "
-        f"{'Curr%':>7}  {'Tgt%':>6}  {'Diff%':>7}  {'Status':<22}"
-    )
-    print("-" * 125)
-    for _, row in holdings_df.iterrows():
-        print(
-            f"{row['Symbol']:<22}  {row['Units']:<28}  {row['Price (USD)']:<14}  "
-            f"{row['Current (USD)']:>12,.2f}  {row['Current (THB)']:>13,.2f}  "
-            f"{row['Current %']:>7}  {row['Target %']:>6}  {row['Diff %']:>7}  {row['Status']:<22}"
-        )
-
-    # ─────────────────────────────────────────────────────────────────
-    # 📈 3. DCA RECOMMENDATIONS (ปรับปรุงใหม่)
-    # ─────────────────────────────────────────────────────────────────
-    print("\n📈 DCA RECOMMENDATIONS (Tactical Action)")
-    print("-" * 115)
-    print_cache_summary()
-    print("-" * 115)
-    dca_df = generate_dca_action_report(rate)
-    
-    print(
-        f"{'Symbol':<22}  {'RSI':>8}  {'DCA (USD)':>12}  "
-        f"{'DCA (THB)':>13}  {'Action Signal':<18}  {'Reason':<30}"
-    )
-    print("-" * 115)
-    
-    for _, row in dca_df.iterrows():
-        # จัดการกรณีแถว TOTAL ที่ค่าบางอย่างเป็น None
-        rsi_val = f"{row['RSI']:.2f}" if isinstance(row['RSI'], (int, float)) else ""
-        dca_usd = f"${row['DCA (USD)']:,.2f}" if isinstance(row['DCA (USD)'], (int, float)) else row['DCA (USD)']
-        dca_thb = f"฿{row['DCA (THB)']:,.2f}" if isinstance(row['DCA (THB)'], (int, float)) else row['DCA (THB)']
+def print_reports_to_console(rate: float):
+    print("\n" + "="*140)
+    print("📋 PORTFOLIO SUMMARY")
+    print("="*140)
+    summary = generate_portfolio_summary(rate)
+    for _, row in summary.iterrows():
+        print(f"{row['Metric'].ljust(60)} {row['Value']}")
         
-        print(
-            f"{row['Symbol']:<22}  {rsi_val:>8}  {dca_usd:>12}  "
-            f"{dca_thb:>13}  {row['Action Signal']:<18}  {row['Reason']:<30}"
-        )
-
-    # ─────────────────────────────────────────────────────────────────
-    # 📊 4. TECHNICAL ANALYSIS (ปรับปรุงใหม่)
-    # ─────────────────────────────────────────────────────────────────
-    print("\n📊 TECHNICAL ANALYSIS")
-    print("-" * 115)
+    print("\n" + "="*140)
+    print("💼 HOLDINGS REPORT")
+    print("="*140)
+    holdings_df = generate_holdings_report(rate)
+    print(holdings_df.to_string(index=False))
+    
+    print("\n" + "="*140)
+    print("🎯 DCA ACTION PLAN")
+    print("="*140)
+    dca_df = generate_dca_action_report(rate)
+    print(dca_df.to_string(index=False))
+    
+    print("\n" + "="*140)
+    print("📊 TECHNICAL ANALYSIS (With Fundamentals)")
+    print("-" * 140)
     tech_df = generate_technical_report()
     
     print(
-        f"{'Symbol':<22}  {'Price (USD)':<15}  {'RSI(14)':>8}  "
-        f"{'RSI Signal':<12}  {'MACD':>10}  {'Signal':>10}  {'MACD Signal':<15}"
+        f"{'Symbol':<15} {'Price (USD)':<12} {'P/E Ratio':<10} {'RSI(14)':>8} "
+        f"{'RSI Signal':<11} {'MACD':>10} {'Signal':>10} {'MACD Signal':<12} {'Growth':<10}"
     )
-    print("-" * 115)
+    print("-" * 140)
     
     for _, row in tech_df.iterrows():
+        pe_str = str(row['P/E Ratio'])
         print(
-            f"{row['Symbol']:<22}  {row['Price (USD)']:<15}  {row['RSI(14)']:>8.2f}  "
-            f"{row['RSI Signal']:<12}  {row['MACD']:>10.4f}  {row['Signal']:>10.4f}  {row['MACD Signal']:<15}"
+            f"{row['Symbol']:<15} {row['Price (USD)']:<12} {pe_str:<10} {row['RSI(14)']:>8.2f} "
+            f"{row['RSI Signal']:<11} {row['MACD']:>10.4f} {row['Signal']:>10.4f} {row['MACD Signal']:<12} {row['Growth']:<10}"
         )
-
-    # Alerts (ท้ายสุด)
+        
     print_action_alerts(rate)
 
-
 def save_all_to_excel(rate: float, output_dir: str = './reports') -> None:
-    """Save multi-sheet Excel with color highlights."""
     os.makedirs(output_dir, exist_ok=True)
     excel_file = f'{output_dir}/Master_Portfolio_Report.xlsx'
 
@@ -466,18 +414,15 @@ def save_all_to_excel(rate: float, output_dir: str = './reports') -> None:
         for sheet_name in ['Summary', 'Holdings', 'DCA_Action', 'Technical']:
             _auto_width(wb[sheet_name])
 
-        # ── DCA_Action: RSI & Action coloring ──
         ws_dca = wb['DCA_Action']
         for row in range(2, ws_dca.max_row + 1):
-            rsi_cell    = ws_dca.cell(row=row, column=2)
-            action_cell = ws_dca.cell(row=row, column=5)
-
+            rsi_cell    = ws_dca.cell(row=row, column=3)
+            action_cell = ws_dca.cell(row=row, column=6)
             if isinstance(rsi_cell.value, (int, float)):
                 if rsi_cell.value >= RSI_OVERBOUGHT:
                     rsi_cell.fill = red_fill
                 elif rsi_cell.value <= RSI_OVERSOLD:
                     rsi_cell.fill = green_fill
-
             val = str(action_cell.value)
             if "BUY" in val:
                 action_cell.fill = green_fill
@@ -488,11 +433,8 @@ def save_all_to_excel(rate: float, output_dir: str = './reports') -> None:
                 action_cell.fill = red_fill
                 action_cell.font = bold_font
 
-        # ── Holdings: Status coloring ──
         ws_h = wb['Holdings']
-        status_col = next(
-            (cell.column for cell in ws_h[1] if cell.value == 'Status'), None
-        )
+        status_col = next((cell.column for cell in ws_h[1] if cell.value == 'Status'), None)
         if status_col:
             for row in range(2, ws_h.max_row + 1):
                 cell = ws_h.cell(row=row, column=status_col)
@@ -506,22 +448,9 @@ def save_all_to_excel(rate: float, output_dir: str = './reports') -> None:
 
     print(f"✅ Master Portfolio Report saved: {excel_file}")
 
-
-# ─────────────────────────────────────────────────────────────────
-# Performance History
-# ─────────────────────────────────────────────────────────────────
-
 def append_performance_history(rate: float) -> None:
-    """
-    Append today's portfolio snapshot to reports/portfolio_history.csv
-
-    columns: date, total_usd, total_thb, rate, monthly_dca_usd,
-             gold_oz, <SYMBOL_USD>...
-    บันทึกวันละครั้ง — ถ้าวันนี้บันทึกแล้วจะ skip อัตโนมัติ
-    """
     history_file = './reports/portfolio_history.csv'
     os.makedirs('./reports', exist_ok=True)
-
     today        = datetime.now().strftime('%Y-%m-%d')
     holdings_usd = _get_current_holdings_usd()
     total_usd    = _get_total_portfolio_usd(holdings_usd)
@@ -538,8 +467,6 @@ def append_performance_history(rate: float) -> None:
         row[sym] = round(val, 4)
 
     fieldnames = list(row.keys())
-
-    # Skip ถ้าวันนี้บันทึกแล้ว
     if os.path.exists(history_file):
         try:
             df_existing = pd.read_csv(history_file, usecols=['date'])
@@ -562,3 +489,12 @@ def append_performance_history(rate: float) -> None:
         f"Total: ${total_usd:,.2f} / ฿{total_usd * rate:,.2f} | "
         f"Gold: {MTS_GOLD_OZ:.6f} oz ({grams:.4f} g)"
     )
+
+def get_dynamic_growth_target():
+    total_weighted_growth = 0.0
+    for symbol, target_pct in TARGET_PORTFOLIO.items():
+        ind = get_cached_indicators(symbol)
+        if ind and 'df' in ind:
+            growth = calculate_historical_growth(ind['df'])
+            total_weighted_growth += (growth * (target_pct / 100))
+    return total_weighted_growth

@@ -61,12 +61,28 @@ assert MTS_GOLD_OZ >= 0, "MTS_GOLD_OZ ต้องเป็นค่า >= 0"
 # 📊 DCA STRATEGY SETTINGS
 # ═══════════════════════════════════════════════════════════════════
 ANNUAL_GROWTH_TARGET   = 0.12    # เป้าหมาย 12% ต่อปี
-MONTHLY_DCA_BUDGET_USD = 46.22   # งบ DCA ต่อเดือน (USD)
+MONTHLY_DCA_BUDGET_USD = 45.00   # งบ DCA ต่อเดือน (USD)
 
 # Auto-calculate เดือนที่เหลือในปีปัจจุบัน
 _today = date.today()
 REMAINING_MONTHS = max(1, 12 - _today.month + 1)
 
+# ═══════════════════════════════════════════════════════════════════
+# 💰 AVERAGE COST (USD) — ต้นทุนเฉลี่ย
+# ═══════════════════════════════════════════════════════════════════
+AVERAGE_COST_USD = {
+    'MSFT' : 0.0,
+    'GOOGL': 0.0,
+    'NVDA' : 0.0,
+    'ASML' : 0.0,
+    'TSM'  : 0.0,
+    'GC=F' : 0.0,
+    'JNJ'  : 0.0,
+    'PG'   : 0.0,
+    'CVX'  : 0.0,
+    'RGTI' : 0.0,
+    'QBTS' : 0.0,
+}
 # ═══════════════════════════════════════════════════════════════════
 # 🔧 TECHNICAL INDICATOR SETTINGS
 # ═══════════════════════════════════════════════════════════════════
@@ -76,7 +92,7 @@ RSI_OVERBOUGHT = 70
 MACD_FAST      = 12
 MACD_SLOW      = 26
 MACD_SIGNAL    = 9
-DATA_PERIOD    = "12mo"
+DATA_PERIOD    = "1y"
 
 # ═══════════════════════════════════════════════════════════════════
 # ⚙️ REBALANCING SETTINGS

@@ -233,3 +233,15 @@ def analyze_trend(rsi: float, macd: float, signal: float) -> str:
         trend += " (Overbought - ระวังดอย)"
 
     return trend
+
+def calculate_historical_growth(df):
+    """คำนวณอัตราการเติบโตจริงจากข้อมูลย้อนหลังใน Cache"""
+    if df is None or len(df) < 2:
+        return 0.0
+    
+    start_price = df['Close'].iloc[0]
+    end_price = df['Close'].iloc[-1]
+    
+    # คำนวณหา % การเปลี่ยนแปลงรวม (Total Return)
+    total_return = (end_price - start_price) / start_price
+    return float(total_return)

@@ -115,9 +115,9 @@ def print_portfolio_status(target_portfolio, current_holdings, total_value, exch
     print(f"{'TOTAL':<8} | ฿{total_value:<14,.2f} | ${total_value_usd:<14,.2f} | {total_current/total_value*100:>8.2f}% | {'100.00':>8}% |")
     print(f"{'='*140}\n")
     
-def get_action_signal(current_pct, target_pct, rsi_value):
+def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value):
     """
-    Generate Action Signals (Buy/Sell/Skip) based on Portfolio and Technicals.
+    Generate Action Signals based on STRICT DCA Principles + Fundamentals (P/E).
     """
     diff = current_pct - target_pct
     is_underweight = diff < -0.5
@@ -126,26 +126,46 @@ def get_action_signal(current_pct, target_pct, rsi_value):
     is_oversold = rsi_value <= RSI_OVERSOLD if rsi_value is not None else False
     is_overbought = rsi_value >= RSI_OVERBOUGHT if rsi_value is not None else False
 
+    # 🔍 1. วิเคราะห์ความถูก/แพงจากค่า P/E
+    is_expensive = False
+    is_cheap = False
+    
+    if pe_value not in [None, "N/A"]:
+        try:
+            pe = float(pe_value)
+            tech_stocks = ['MSFT', 'GOOGL', 'NVDA', 'ASML', 'TSM']
+            value_stocks = ['JNJ', 'PG', 'CVX']
+            
+            if symbol in tech_stocks:
+                if pe > 60: is_expensive = True
+                elif pe < 30: is_cheap = True
+            elif symbol in value_stocks:
+                if pe > 25: is_expensive = True
+                elif pe < 15: is_cheap = True
+        except:
+            pass
+
+    # 🎯 2. ตัดสินใจ Action
     if is_underweight:
-        if is_overbought:
-            return "SKIP 🟡", "Wait for pullback (Overbought)"
-        elif is_oversold:
-            return "STRONG BUY 🟢🟢", "Value Zone + Underweight"
+        if is_expensive:
+            return "BUY 🟡", "Accumulate (Underweight but High P/E)"
+        elif is_cheap and is_oversold:
+            return "STRONG BUY 🟢🟢", "Undervalued (Low P/E) + Oversold"
+        elif is_cheap:
+            return "BUY 🟢", "Accumulate (Underweight & Low P/E)"
         else:
             return "BUY 🟢", "Accumulate (Underweight)"
     
     elif is_overweight:
-        if is_overbought:
-            return "SELL 🔴", "Take Profit (Overbought & Overweight)"
-        elif is_oversold:
-            return "HOLD ⚪", "Attractive price but Overweight"
+        if is_expensive and is_overbought:
+            return "HOLD ⚪", "Overvalued + Overbought (Wait)"
         else:
-            return "SKIP 🟡", "Stop buying (Target reached)"
+            return "HOLD ⚪", "Overweight (Redirect DCA funds)"
     
-    else: # On Target
-        if is_oversold:
-            return "BUY 🟢", "Price dip (Maintain allocation)"
-        elif is_overbought:
-            return "SKIP 🟡", "Price stretched (Pause buying)"
+    else: 
+        if is_cheap:
+            return "DCA 🟢", "Price is cheap (Regular DCA)"
+        elif is_expensive:
+            return "DCA 🟡", "Price is high but maintain DCA"
         else:
-            return "DCA ⚪", "Maintain discipline (Regular DCA)"
+            return "DCA 🔵", "Maintain discipline (Regular DCA)"

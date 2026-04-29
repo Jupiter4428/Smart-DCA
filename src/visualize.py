@@ -43,8 +43,8 @@ SYMBOL_COLORS = [
     '#f87171', '#2dd4bf', '#c084fc',
 ]
 
-# Label แสดงใน legend สำหรับ GLD
-SYMBOL_LABELS = {s: (f"{s} (MTS-Gold)" if s == 'GLD' else s) for s in TARGET_PORTFOLIO}
+# Label แสดงใน legend สำหรับ GC=F (MTS-Gold)
+SYMBOL_LABELS = {s: (f"{s} (MTS-Gold)" if s == 'GC=F' else s) for s in TARGET_PORTFOLIO}
 
 
 def _style_ax(ax, grid_both: bool = False):
