@@ -15,6 +15,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.gridspec import GridSpec
+import matplotlib.pyplot as plt
+
+# ใช้ Tahoma (รองรับ ฿ และภาษาไทย) เป็นตัวหลัก และใช้ Segoe UI Emoji เป็นตัวสำรองสำหรับรูปภาพ
+plt.rcParams['font.family'] = ['Tahoma', 'Segoe UI Emoji']
+
 from config import TARGET_PORTFOLIO
 
 HISTORY_FILE = './reports/portfolio_history.csv'

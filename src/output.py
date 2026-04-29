@@ -357,18 +357,23 @@ def print_action_alerts(rate: float) -> None:
 # ─────────────────────────────────────────────────────────────────
 
 def print_reports_to_console(rate: float) -> None:
-    """Formatted terminal output of all reports."""
+    """Formatted terminal output of all reports with consistent table styles."""
+    
+    # ─────────────────────────────────────────────────────────────────
+    # 📋 1. PORTFOLIO SUMMARY (ปรับให้มี Header เหมือนตารางอื่น)
+    # ─────────────────────────────────────────────────────────────────
     print("\n" + "=" * 100)
     print("📊 PORTFOLIO ANALYSIS REPORT")
     print("=" * 100)
-
-    # Summary
     print("\n📋 PORTFOLIO SUMMARY")
     print("-" * 100)
-    for _, row in generate_portfolio_summary(rate).iterrows():
+    summary_df = generate_portfolio_summary(rate)
+    for _, row in summary_df.iterrows():
         print(f"{row['Metric']:.<60} {row['Value']}")
 
-    # Holdings
+    # ─────────────────────────────────────────────────────────────────
+    # 💰 2. HOLDINGS REPORT (ต้นแบบ)
+    # ─────────────────────────────────────────────────────────────────
     print("\n💰 HOLDINGS REPORT")
     print("-" * 125)
     holdings_df = generate_holdings_report(rate)
@@ -385,24 +390,50 @@ def print_reports_to_console(rate: float) -> None:
             f"{row['Current %']:>7}  {row['Target %']:>6}  {row['Diff %']:>7}  {row['Status']:<22}"
         )
 
-    # DCA Recommendations
+    # ─────────────────────────────────────────────────────────────────
+    # 📈 3. DCA RECOMMENDATIONS (ปรับปรุงใหม่)
+    # ─────────────────────────────────────────────────────────────────
     print("\n📈 DCA RECOMMENDATIONS (Tactical Action)")
     print("-" * 115)
-    dca_df = generate_dca_action_report(rate)
     print_cache_summary()
-    dca_print = dca_df.copy()
-    dca_print['DCA (USD)'] = dca_print['DCA (USD)'].apply(
-        lambda x: f"${x:,.2f}" if isinstance(x, (int, float)) else x
+    print("-" * 115)
+    dca_df = generate_dca_action_report(rate)
+    
+    print(
+        f"{'Symbol':<22}  {'RSI':>8}  {'DCA (USD)':>12}  "
+        f"{'DCA (THB)':>13}  {'Action Signal':<18}  {'Reason':<30}"
     )
-    dca_print['DCA (THB)'] = dca_print['DCA (THB)'].apply(
-        lambda x: f"฿{x:,.2f}" if isinstance(x, (int, float)) else x
-    )
-    print(dca_print.to_string(index=False))
+    print("-" * 115)
+    
+    for _, row in dca_df.iterrows():
+        # จัดการกรณีแถว TOTAL ที่ค่าบางอย่างเป็น None
+        rsi_val = f"{row['RSI']:.2f}" if isinstance(row['RSI'], (int, float)) else ""
+        dca_usd = f"${row['DCA (USD)']:,.2f}" if isinstance(row['DCA (USD)'], (int, float)) else row['DCA (USD)']
+        dca_thb = f"฿{row['DCA (THB)']:,.2f}" if isinstance(row['DCA (THB)'], (int, float)) else row['DCA (THB)']
+        
+        print(
+            f"{row['Symbol']:<22}  {rsi_val:>8}  {dca_usd:>12}  "
+            f"{dca_thb:>13}  {row['Action Signal']:<18}  {row['Reason']:<30}"
+        )
 
-    # Technical
+    # ─────────────────────────────────────────────────────────────────
+    # 📊 4. TECHNICAL ANALYSIS (ปรับปรุงใหม่)
+    # ─────────────────────────────────────────────────────────────────
     print("\n📊 TECHNICAL ANALYSIS")
     print("-" * 115)
-    print(generate_technical_report().to_string(index=False))
+    tech_df = generate_technical_report()
+    
+    print(
+        f"{'Symbol':<22}  {'Price (USD)':<15}  {'RSI(14)':>8}  "
+        f"{'RSI Signal':<12}  {'MACD':>10}  {'Signal':>10}  {'MACD Signal':<15}"
+    )
+    print("-" * 115)
+    
+    for _, row in tech_df.iterrows():
+        print(
+            f"{row['Symbol']:<22}  {row['Price (USD)']:<15}  {row['RSI(14)']:>8.2f}  "
+            f"{row['RSI Signal']:<12}  {row['MACD']:>10.4f}  {row['Signal']:>10.4f}  {row['MACD Signal']:<15}"
+        )
 
     # Alerts (ท้ายสุด)
     print_action_alerts(rate)
