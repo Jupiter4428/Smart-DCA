@@ -10,41 +10,37 @@ from datetime import date
 # ═══════════════════════════════════════════════════════════════════
 # 🎯 TARGET PORTFOLIO ALLOCATION (%)
 # ═══════════════════════════════════════════════════════════════════
-# Total must equal 100%
 TARGET_PORTFOLIO = {
-    'MSFT': 18.0,   # แกนหลัก AI & Cloud
-    'GOOGL': 14.0,  # แกนหลัก AI & Search
-    'NVDA': 6.0,    # AI GPU chips (เสริม ecosystem)
-    'ASML': 12.0,   # เครื่องจักรผลิตชิป (supply chain)
-    'TSM': 12.0,    # ผลิตชิป (supply chain)
-    'GLD': 13.0,    # ทองคำ (Safe Haven) hedging
-    'JNJ': 5.0,     # Healthcare defensive
-    'PG': 5.0,      # Consumer Staples (ต้านเศรษฐกิจชะลอ)
-    'CVX': 4.0,     # Energy/Inflation hedge
-    'RGTI': 6.0,    # Quantum growth bet
-    'QBTS': 5.0     # Quantum growth bet
-}
-
-# ═══════════════════════════════════════════════════════════════════
-# 💰 CURRENT_HOLDINGS (in USD)
-# ═══════════════════════════════════════════════════════════════════
-# อัปเดตทุกเดือนหลัง DCA แล้ว
-CURRENT_HOLDINGS = {
-    'MSFT': 27.73,
+    'MSFT' : 0.0,
     'GOOGL': 0.0,
-    'NVDA': 0.0,
-    'ASML': 25.99,
-    'TSM': 22.94,
-    'GLD': 9.66,
-    'JNJ': 0.0,
-    'PG': 0.0,
-    'CVX': 0.0,
-    'RGTI': 18.80,
-    'QBTS': 18.35
+    'NVDA' : 0.0,
+    'ASML' : 0.0,
+    'TSM'  : 0.0,
+    'GC=F' : 0.0,
+    'JNJ'  : 0.0,
+    'PG'   : 0.0,
+    'CVX'  : 0.0,
+    'RGTI' : 0.0,
+    'QBTS' : 0.0,
 }
 
-# คำนวณ portfolio value จาก holdings อัตโนมัติ (USD)
-CURRENT_PORTFOLIO_VALUE_USD = sum(CURRENT_HOLDINGS.values())
+# ═══════════════════════════════════════════════════════════════════
+# 📦 CURRENT HOLDINGS — จำนวนหุ้น (shares)
+# ═══════════════════════════════════════════════════════════════════
+# ✏️  กรอกตัวเลขจาก Dime app ทุกครั้งที่ซื้อเพิ่ม
+# ระบบดึงราคาล่าสุดจาก yfinance แล้วคำนวณมูลค่า USD อัตโนมัติ
+CURRENT_HOLDINGS_SHARES = {
+    'MSFT' : 0.0,
+    'GOOGL': 0.0,
+    'NVDA' : 0.0,
+    'ASML' : 0.0,
+    'TSM'  : 0.0,
+    'JNJ'  : 0.0,
+    'PG'   : 0.0,
+    'CVX'  : 0.0,
+    'RGTI' : 0.0,
+    'QBTS' : 0.0,
+}
 
 # ═══════════════════════════════════════════════════════════════════
 # 📊 DCA STRATEGY SETTINGS
@@ -52,38 +48,36 @@ CURRENT_PORTFOLIO_VALUE_USD = sum(CURRENT_HOLDINGS.values())
 ANNUAL_GROWTH_TARGET   = 0.12    # เป้าหมาย 12% ต่อปี
 MONTHLY_DCA_BUDGET_USD = 46.22   # งบ DCA ต่อเดือน (USD)
 
-# ── Auto-calculate เดือนที่เหลือในปีปัจจุบัน ──────────────────────
-# เช่น รันเดือน เม.ย. (4) → 12 - 4 + 1 = 9 เดือน
-# ไม่ต้องแก้มือทุกเดือนอีกต่อไป
+# Auto-calculate เดือนที่เหลือในปีปัจจุบัน
 _today = date.today()
 REMAINING_MONTHS = max(1, 12 - _today.month + 1)
 
 # ═══════════════════════════════════════════════════════════════════
 # 🔧 TECHNICAL INDICATOR SETTINGS
 # ═══════════════════════════════════════════════════════════════════
-RSI_PERIOD     = 14      # RSI lookback period (days)
-RSI_OVERSOLD   = 30      # RSI oversold threshold
-RSI_OVERBOUGHT = 70      # RSI overbought threshold
-MACD_FAST      = 12      # MACD fast EMA period
-MACD_SLOW      = 26      # MACD slow EMA period
-MACD_SIGNAL    = 9       # MACD signal line EMA period
-DATA_PERIOD    = "12mo"  # Historical data period for analysis
+RSI_PERIOD     = 14
+RSI_OVERSOLD   = 30
+RSI_OVERBOUGHT = 70
+MACD_FAST      = 12
+MACD_SLOW      = 26
+MACD_SIGNAL    = 9
+DATA_PERIOD    = "12mo"
 
 # ═══════════════════════════════════════════════════════════════════
 # ⚙️ REBALANCING SETTINGS
 # ═══════════════════════════════════════════════════════════════════
-REBALANCE_TOLERANCE  = 0.5   # % tolerance before rebalancing needed
-MIN_REBALANCE_FACTOR = 0.3   # Minimum allocation multiplier
-MAX_REBALANCE_FACTOR = 1.5   # Maximum allocation multiplier
+REBALANCE_TOLERANCE  = 0.5
+MIN_REBALANCE_FACTOR = 0.3
+MAX_REBALANCE_FACTOR = 1.5
 
 # ═══════════════════════════════════════════════════════════════════
 # 💱 CURRENCY SETTINGS
 # ═══════════════════════════════════════════════════════════════════
-DEFAULT_EXCHANGE_RATE  = 33.5  # Default THB/USD if API fails
-EXCHANGE_RATE_TIMEOUT  = 5     # Seconds to wait for API response
+DEFAULT_EXCHANGE_RATE = 33.5
+EXCHANGE_RATE_TIMEOUT = 5
 
 # ═══════════════════════════════════════════════════════════════════
 # 📋 DISPLAY SETTINGS
 # ═══════════════════════════════════════════════════════════════════
-SHOW_EMOJI     = True   # Show emoji in output
-DECIMAL_PLACES = 2      # Decimal places for currency display
+SHOW_EMOJI     = True
+DECIMAL_PLACES = 2
