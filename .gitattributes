@@ -1,0 +1,41 @@
+# ═══════════════════════════════════════════════════════════════════
+# 🔧 Git Attributes — project_DCA
+# ═══════════════════════════════════════════════════════════════════
+
+# ── Line Endings (Auto-normalize ทุก OS) ──────────────────────────
+* text=auto
+
+# ── Python Source Files ───────────────────────────────────────────
+*.py        text eol=lf diff=python
+*.pyi       text eol=lf diff=python
+
+# ── Config & Docs ─────────────────────────────────────────────────
+*.txt       text eol=lf
+*.md        text eol=lf
+*.cfg       text eol=lf
+*.toml      text eol=lf
+*.ini       text eol=lf
+*.env       text eol=lf
+.gitignore  text eol=lf
+
+# ── Data Files (ไม่ normalize — binary-safe) ──────────────────────
+*.csv       text eol=lf
+*.xlsx      binary
+*.xls       binary
+
+# ── Images & Media ────────────────────────────────────────────────
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.svg       text eol=lf
+
+# ── Archives ──────────────────────────────────────────────────────
+*.zip       binary
+*.tar       binary
+*.gz        binary
+
+# ── Thai filename support (UTF-8) ─────────────────────────────────
+# Git จัดการ Unicode filename ผ่าน core.quotepath=false
+# ตั้งค่าด้วย: git config core.quotepath false
