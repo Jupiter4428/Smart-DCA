@@ -245,3 +245,7 @@ def calculate_historical_growth(df):
     # คำนวณหา % การเปลี่ยนแปลงรวม (Total Return)
     total_return = (end_price - start_price) / start_price
     return float(total_return)
+
+def calculate_ema(series, period=26):
+    """คำนวณ Exponential Moving Average"""
+    return series.ewm(span=period, adjust=False).mean()
