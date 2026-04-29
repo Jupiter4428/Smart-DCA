@@ -5,9 +5,9 @@ Console and Excel report generation for the DCA Portfolio System.
 
 การเปลี่ยนแปลงหลัก:
   1. รองรับ CURRENT_HOLDINGS_SHARES (จำนวนหุ้น) → มูลค่า = shares × latest_price
-  2. รองรับ MTS-GOLD: มูลค่า = MTS_GOLD_OZ × GLD_price_per_troy_oz
+  2. รองรับ MTS-GOLD: มูลค่า = MTS_GOLD_OZ × GC=F_price_per_troy_oz
   3. แก้ bug Price (USD) ใน Holdings — ดึงจาก get_cached_indicators() โดยตรง
-  4. เพิ่ม GLD label เป็น 'GLD (MTS-Gold)' ใน legend ทุก report
+  4. เพิ่ม GC=F label เป็น 'GC=F (MTS-Gold)' ใน legend ทุก report
   5. เพิ่ม print_action_alerts() — สรุป STRONG BUY / SELL ท้าย console
 """
 
@@ -27,7 +27,10 @@ from config import (
     MONTHLY_DCA_BUDGET_USD,
     REMAINING_MONTHS,
     REBALANCE_TOLERANCE,
+    RSI_OVERSOLD,      # <-- เพิ่มบรรทัดนี้
+    RSI_OVERBOUGHT,    # <-- เพิ่มบรรทัดนี้
 )
+
 from src.indicators import download_historical_data, calculate_rsi, calculate_macd
 from src.utils import get_status_indicator
 from src.portfolio import get_action_signal, calculate_rebalance_factors
@@ -45,7 +48,7 @@ def get_cached_indicators(symbol: str) -> dict | None:
     """
     Return cached technical indicators for a symbol.
     Downloads from yfinance only on first call per session.
-    GLD ถูกใช้เป็น proxy ราคาสำหรับ MTS-GOLD
+    GC=F ถูกใช้เป็น proxy ราคาสำหรับ MTS-GOLD
     """
     if symbol not in _indicator_cache:
         from src.indicators import _is_cache_valid, _get_cache_path
@@ -103,7 +106,7 @@ def clear_indicator_cache() -> None:
 
 def _display_name(symbol: str) -> str:
     """Return display label for a symbol."""
-    return f"{symbol} (MTS-Gold)" if symbol == 'GLD' else symbol
+    return f"{symbol} (MTS-Gold)" if symbol == 'GC=F' else symbol
 
 
 def _get_current_holdings_usd() -> dict[str, float]:
@@ -111,7 +114,7 @@ def _get_current_holdings_usd() -> dict[str, float]:
     คำนวณมูลค่าปัจจุบันทุก symbol เป็น USD
 
     - หุ้นทั่วไป : shares × latest_price (USD)
-    - GLD (MTS-GOLD) : MTS_GOLD_OZ × GLD_price_per_troy_oz
+    - GC=F (MTS-GOLD) : MTS_GOLD_OZ × GC=F_price_per_troy_oz
 
     Returns:
         dict {symbol: value_usd}
@@ -119,9 +122,9 @@ def _get_current_holdings_usd() -> dict[str, float]:
     holdings_usd: dict[str, float] = {}
 
     for symbol in TARGET_PORTFOLIO:
-        if symbol == 'GLD':
-            ind = get_cached_indicators('GLD')
-            holdings_usd['GLD'] = (MTS_GOLD_OZ * ind['price']) if (ind and MTS_GOLD_OZ > 0) else 0.0
+        if symbol == 'GC=F':
+            ind = get_cached_indicators('GC=F')
+            holdings_usd['GC=F'] = (MTS_GOLD_OZ * ind['price']) if (ind and MTS_GOLD_OZ > 0) else 0.0
         else:
             shares = CURRENT_HOLDINGS_SHARES.get(symbol, 0.0)
             if shares > 0:
@@ -153,9 +156,9 @@ def generate_portfolio_summary(rate: float) -> pd.DataFrame:
     budget_thb     = MONTHLY_DCA_BUDGET_USD * rate
 
     # Gold display
-    gld_ind       = get_cached_indicators('GLD')
-    gld_price_str = f"${gld_ind['price']:,.2f}/oz" if gld_ind else "N/A"
-    gold_usd      = holdings_usd.get('GLD', 0.0)
+    gcf_ind       = get_cached_indicators('GC=F')
+    gcf_price_str = f"${gcf_ind['price']:,.2f}/oz" if gcf_ind else "N/A"
+    gold_usd      = holdings_usd.get('GC=F', 0.0)
 
     data = {
         'Metric': [
@@ -178,7 +181,7 @@ def generate_portfolio_summary(rate: float) -> pd.DataFrame:
             REMAINING_MONTHS,
             f"${target_end_usd:,.2f}  /  ฿{target_end_thb:,.2f}",
             f"${req_dca_usd:,.2f}  /  ฿{req_dca_usd * rate:,.2f}",
-            f"{MTS_GOLD_OZ:.6f} oz  ({MTS_GOLD_OZ * 31.1035:.4f} g)  |  {gld_price_str}  |  ${gold_usd:,.2f}",
+            f"{MTS_GOLD_OZ:.6f} oz  ({MTS_GOLD_OZ * 31.1035:.4f} g)  |  {gcf_price_str}  |  ${gold_usd:,.2f}",
         ]
     }
     return pd.DataFrame(data)
@@ -200,12 +203,12 @@ def generate_holdings_report(rate: float) -> pd.DataFrame:
         # ── Price: ดึงจาก cache โดยตรง (แก้ bug เดิม) ──
         ind = get_cached_indicators(symbol)
         if ind:
-            price_str = f"${ind['price']:,.2f}" + (" /oz" if symbol == 'GLD' else "")
+            price_str = f"${ind['price']:,.2f}" + (" /oz" if symbol == 'GC=F' else "")
         else:
             price_str = "N/A"
 
         # ── Units display ──
-        if symbol == 'GLD':
+        if symbol == 'GC=F':
             units_str = f"{MTS_GOLD_OZ:.6f} oz ({MTS_GOLD_OZ * 31.1035:.4f} g)"
         else:
             units_str = f"{CURRENT_HOLDINGS_SHARES.get(symbol, 0.0):.7f} shares"
@@ -245,9 +248,9 @@ def generate_dca_action_report(rate: float) -> pd.DataFrame:
         ind = get_cached_indicators(symbol)
         rsi = ind['rsi'] if ind else None
 
-        if rsi is not None and rsi >= 70:
+        if rsi is not None and rsi >= RSI_OVERBOUGHT:
             mul = 0.20
-        elif rsi is not None and rsi <= 30:
+        elif rsi is not None and rsi <= RSI_OVERSOLD:
             mul = 1.50
         elif rsi is not None:
             mul = float(np.clip((100 - rsi) / 50, 0.5, 1.5))
@@ -287,10 +290,10 @@ def generate_technical_report() -> pd.DataFrame:
         if ind:
             rows.append({
                 'Symbol'     : _display_name(symbol),
-                'Price (USD)': f"${ind['price']:,.2f}" + (" /oz" if symbol == 'GLD' else ""),
+                'Price (USD)': f"${ind['price']:,.2f}" + (" /oz" if symbol == 'GC=F' else ""),
                 'RSI(14)'    : round(ind['rsi'], 2),
-                'RSI Signal' : ("Overbought" if ind['rsi'] > 70
-                                else "Oversold" if ind['rsi'] < 30
+                'RSI Signal' : ("Overbought" if ind['rsi'] > RSI_OVERBOUGHT
+                                else "Oversold" if ind['rsi'] < RSI_OVERSOLD
                                 else "Neutral"),
                 'MACD'       : round(ind['macd'], 4),
                 'Signal'     : round(ind['signal'], 4),
@@ -439,9 +442,9 @@ def save_all_to_excel(rate: float, output_dir: str = './reports') -> None:
             action_cell = ws_dca.cell(row=row, column=5)
 
             if isinstance(rsi_cell.value, (int, float)):
-                if rsi_cell.value >= 70:
+                if rsi_cell.value >= RSI_OVERBOUGHT:
                     rsi_cell.fill = red_fill
-                elif rsi_cell.value <= 30:
+                elif rsi_cell.value <= RSI_OVERSOLD:
                     rsi_cell.fill = green_fill
 
             val = str(action_cell.value)

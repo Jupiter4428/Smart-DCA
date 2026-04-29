@@ -4,7 +4,7 @@
 Portfolio rebalancing status, tracking, and calculations.
 """
 
-from config import REBALANCE_TOLERANCE
+from config import REBALANCE_TOLERANCE, RSI_OVERSOLD, RSI_OVERBOUGHT
 from src.utils import get_status_indicator
 
 
@@ -123,8 +123,8 @@ def get_action_signal(current_pct, target_pct, rsi_value):
     is_underweight = diff < -0.5
     is_overweight = diff > 2.0
 
-    is_oversold = rsi_value < 30 if rsi_value is not None else False
-    is_overbought = rsi_value > 70 if rsi_value is not None else False
+    is_oversold = rsi_value <= RSI_OVERSOLD if rsi_value is not None else False
+    is_overbought = rsi_value >= RSI_OVERBOUGHT if rsi_value is not None else False
 
     if is_underweight:
         if is_overbought:
