@@ -5,6 +5,8 @@ All portfolio targets, current holdings, and DCA strategy defined here.
 Modify this file to update your portfolio settings.
 """
 
+from datetime import date
+
 # ═══════════════════════════════════════════════════════════════════
 # 🎯 TARGET PORTFOLIO ALLOCATION (%)
 # ═══════════════════════════════════════════════════════════════════
@@ -24,9 +26,9 @@ TARGET_PORTFOLIO = {
 }
 
 # ═══════════════════════════════════════════════════════════════════
-# 💰 CURRENT HOLDINGS (in USD) ← เปลี่ยนจาก THB เป็น USD
+# 💰 CURRENT_HOLDINGS (in USD)
 # ═══════════════════════════════════════════════════════════════════
-# Update these values monthly with your actual portfolio (USD)
+# อัปเดตทุกเดือนหลัง DCA แล้ว
 CURRENT_HOLDINGS = {
     'MSFT': 27.73,
     'GOOGL': 0.0,
@@ -47,36 +49,41 @@ CURRENT_PORTFOLIO_VALUE_USD = sum(CURRENT_HOLDINGS.values())
 # ═══════════════════════════════════════════════════════════════════
 # 📊 DCA STRATEGY SETTINGS
 # ═══════════════════════════════════════════════════════════════════
-ANNUAL_GROWTH_TARGET = 0.12        # เป้าหมาย 12% ต่อปี
-MONTHLY_DCA_BUDGET_USD = 46.22     # งบ DCA ต่อเดือน (USD)
-REMAINING_MONTHS = 12               
+ANNUAL_GROWTH_TARGET   = 0.12    # เป้าหมาย 12% ต่อปี
+MONTHLY_DCA_BUDGET_USD = 46.22   # งบ DCA ต่อเดือน (USD)
+
+# ── Auto-calculate เดือนที่เหลือในปีปัจจุบัน ──────────────────────
+# เช่น รันเดือน เม.ย. (4) → 12 - 4 + 1 = 9 เดือน
+# ไม่ต้องแก้มือทุกเดือนอีกต่อไป
+_today = date.today()
+REMAINING_MONTHS = max(1, 12 - _today.month + 1)
 
 # ═══════════════════════════════════════════════════════════════════
 # 🔧 TECHNICAL INDICATOR SETTINGS
 # ═══════════════════════════════════════════════════════════════════
-RSI_PERIOD = 14                    # RSI lookback period (days)
-RSI_OVERSOLD = 30                  # RSI oversold threshold
-RSI_OVERBOUGHT = 70                # RSI overbought threshold
-MACD_FAST = 12                     # MACD fast EMA period
-MACD_SLOW = 26                     # MACD slow EMA period
-MACD_SIGNAL = 9                    # MACD signal line EMA period
-DATA_PERIOD = "12mo"               # Historical data period for analysis
+RSI_PERIOD     = 14      # RSI lookback period (days)
+RSI_OVERSOLD   = 30      # RSI oversold threshold
+RSI_OVERBOUGHT = 70      # RSI overbought threshold
+MACD_FAST      = 12      # MACD fast EMA period
+MACD_SLOW      = 26      # MACD slow EMA period
+MACD_SIGNAL    = 9       # MACD signal line EMA period
+DATA_PERIOD    = "12mo"  # Historical data period for analysis
 
 # ═══════════════════════════════════════════════════════════════════
 # ⚙️ REBALANCING SETTINGS
 # ═══════════════════════════════════════════════════════════════════
-REBALANCE_TOLERANCE = 0.5          # % tolerance before rebalancing needed
-MIN_REBALANCE_FACTOR = 0.3         # Minimum allocation multiplier
-MAX_REBALANCE_FACTOR = 1.5         # Maximum allocation multiplier
+REBALANCE_TOLERANCE  = 0.5   # % tolerance before rebalancing needed
+MIN_REBALANCE_FACTOR = 0.3   # Minimum allocation multiplier
+MAX_REBALANCE_FACTOR = 1.5   # Maximum allocation multiplier
 
 # ═══════════════════════════════════════════════════════════════════
 # 💱 CURRENCY SETTINGS
 # ═══════════════════════════════════════════════════════════════════
-DEFAULT_EXCHANGE_RATE = 33.5       # Default THB/USD if API fails
-EXCHANGE_RATE_TIMEOUT = 5          # Seconds to wait for API response
+DEFAULT_EXCHANGE_RATE  = 33.5  # Default THB/USD if API fails
+EXCHANGE_RATE_TIMEOUT  = 5     # Seconds to wait for API response
 
 # ═══════════════════════════════════════════════════════════════════
 # 📋 DISPLAY SETTINGS
 # ═══════════════════════════════════════════════════════════════════
-SHOW_EMOJI = True                  # Show emoji in output
-DECIMAL_PLACES = 2                 # Decimal places for currency display
+SHOW_EMOJI     = True   # Show emoji in output
+DECIMAL_PLACES = 2      # Decimal places for currency display

@@ -318,3 +318,56 @@ def save_all_to_excel(rate, output_dir='./reports'):
                 action_cell.font = bold_font
 
     print(f"✅ English Master Dashboard saved: {excel_file}")
+    
+"""
+─────────────────────────────────────────────────────────────────
+📝 เพิ่มฟังก์ชันนี้ต่อท้าย output.py (ก่อน EOF)
+─────────────────────────────────────────────────────────────────
+"""
+
+def append_performance_history(rate: float) -> None:
+    """
+    Append today's portfolio snapshot to reports/portfolio_history.csv
+    - เรียกครั้งเดียวต่อวัน (ถ้าวันนี้บันทึกแล้วจะ skip อัตโนมัติ)
+    - columns: date, total_usd, total_thb, rate, monthly_dca_usd, <SYMBOL>...
+    """
+    import csv
+    from datetime import datetime
+
+    history_file = './reports/portfolio_history.csv'
+    os.makedirs('./reports', exist_ok=True)
+
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    # ── Build row ──
+    row = {
+        'date'           : today,
+        'total_usd'      : round(CURRENT_PORTFOLIO_VALUE_USD, 4),
+        'total_thb'      : round(CURRENT_PORTFOLIO_VALUE_USD * rate, 2),
+        'rate'           : round(rate, 4),
+        'monthly_dca_usd': MONTHLY_DCA_BUDGET_USD,
+    }
+    for sym, val in CURRENT_HOLDINGS.items():
+        row[sym] = val
+
+    fieldnames = list(row.keys())
+
+    # ── Skip if today already recorded ──
+    if os.path.exists(history_file):
+        try:
+            df_existing = pd.read_csv(history_file, usecols=['date'])
+            if today in df_existing['date'].values:
+                print(f"ℹ️  History already recorded for {today} — skipping.")
+                return
+        except Exception:
+            pass  # ถ้าอ่าน CSV ไม่ได้ → เขียนต่อเลย
+
+    # ── Append row ──
+    file_exists = os.path.exists(history_file)
+    with open(history_file, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(row)
+
+    print(f"✅ Snapshot recorded → {today} | Total: ${CURRENT_PORTFOLIO_VALUE_USD:,.2f} / ฿{CURRENT_PORTFOLIO_VALUE_USD * rate:,.2f}")
