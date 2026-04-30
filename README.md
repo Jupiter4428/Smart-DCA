@@ -1,37 +1,37 @@
 # 📈 Smart-DCA — Portfolio Analysis System
 
-ระบบวิเคราะห์และจัดการพอร์ตการลงทุนแบบ **Tactical DCA + Active Rebalancing** อัตโนมัติ ออกแบบมาเพื่อเพิ่มประสิทธิภาพการลงทุนเหนือกว่าการ DCA ทั่วไป โดยใช้การคำนวณเชิงปริมาณ (Quantitative Analysis) ร่วมกับสัญญาณทางเทคนิคและพื้นฐาน
+An automated **Tactical DCA + Active Rebalancing** portfolio analysis system designed to outperform conventional Dollar-Cost Averaging through quantitative analysis combined with technical and fundamental signals.
 
 ---
 
-## ✨ ฟีเจอร์เด่น (Key Features)
+## ✨ Key Features
 
-- **Multi-Factor Decision Logic:** ตัดสินใจซื้อขายโดยประเมินจาก 4 ปัจจัยหลัก: Rebalance Weight, RSI, MACD และ P/E Ratio (Fundamental)
+- **Multi-Factor Decision Logic** — Investment decisions evaluated across 4 core factors: Rebalance Weight, RSI, MACD, and P/E Ratio (Fundamental)
 
-- **Backtesting Engine:** 🚀 **ใหม่!** ระบบจำลองการลงทุนย้อนหลังตั้งแต่ปี 2021 เพื่อเปรียบเทียบผลตอบแทนระหว่าง "Smart DCA" กับ "Pure DCA" พร้อมคำนวณค่า Alpha
+- **Backtesting Engine** 🚀 — Simulates historical investment performance from 2021 onward, comparing returns between Smart DCA and Pure DCA strategies, including Alpha calculation
 
-- **EMA 26 Support Analysis:** วิเคราะห์จุดพักฐานของราคาเพื่อหาจังหวะสะสมหุ้นที่ปลอดภัยในเชิงโมเมนตัม
+- **EMA 26 Support Analysis** — Detects price consolidation zones to identify safe accumulation opportunities based on momentum
 
-- **Special Hedge Asset Handling:** ระบบแยกการจัดการทองคำ (MTS-Gold) ออกเป็นสินทรัพย์ป้องกันความเสี่ยง เพื่อรักษาวินัยการซื้อสะสมอย่างต่อเนื่องแม้ในสภาวะตลาดผันผวน
+- **Special Hedge Asset Handling** — Separates gold (MTS-Gold) as a dedicated hedge asset, maintaining consistent accumulation discipline even in volatile market conditions
 
-- **Disk Cache System:** ระบบบันทึกราคาหุ้นเป็น CSV เพื่อลดการเรียก API (yfinance) และเพิ่มความเร็วในการประมวลผล
+- **Disk Cache System** — Stores stock prices as CSV files to minimize yfinance API calls and improve processing speed
 
 ---
 
 ## 🗂️ Project Structure
 
 ```
-project_DCA/
-├── run.py                  # Entry Point — รันระบบวิเคราะห์พอร์ตปัจจุบัน
-├── backtest.py             # 🚀 Backtesting Engine — รันจำลองการลงทุนย้อนหลัง
-├── config.py               # ตั้งค่าพอร์ต, เป้าหมาย 12%, และงบประมาณ DCA
+smart_dca/
+├── run.py                  # Entry Point — runs the current portfolio analysis
+├── backtest.py             # 🚀 Backtesting Engine — simulates historical investment
+├── config.py               # Portfolio settings, 12% annual target, and DCA budget
 ├── requirements.txt        # Dependencies (pandas, yfinance, matplotlib, etc.)
-├── data/cache/             # Disk cache ราคาหุ้น (auto-generated)
-├── reports/                # โฟลเดอร์เก็บผลลัพธ์ (auto-generated)
-│   ├── Master_Portfolio_Report.xlsx  # รายงานละเอียด 4 Sheets
-│   ├── portfolio_history.csv         # ข้อมูล Snapshot มูลค่าพอร์ตรายวัน
-│   ├── portfolio_performance.png     # กราฟ Performance ภาพรวมพอร์ต
-│   └── backtest_result.png           # กราฟเปรียบเทียบผลการทดสอบย้อนหลัง
+├── data/cache/             # Disk cache for stock prices (auto-generated)
+├── reports/                # Output folder (auto-generated)
+│   ├── Master_Portfolio_Report.xlsx  # Detailed report — 4 sheets
+│   ├── portfolio_history.csv         # Daily portfolio value snapshots
+│   ├── portfolio_performance.png     # Portfolio performance chart
+│   └── backtest_result.png           # Backtesting comparison chart
 └── src/
     ├── indicators.py       # RSI, MACD, EMA, Historical Growth
     ├── portfolio.py        # 🧠 Brain: Decision Logic & Rebalance Factor
@@ -43,28 +43,27 @@ project_DCA/
 
 ## ⚙️ Setup
 
-**1. Clone repo**
+**1. Clone the repository**
 ```bash
 git clone https://github.com/Jupiter4428/Smart-DCA.git
 cd Smart-DCA
 ```
 
-**2. สร้าง Virtual Environment**
+**2. Create a virtual environment**
 ```bash
 python -m venv .venv
 .venv\Scripts\activate        # Windows
 # source .venv/bin/activate   # macOS/Linux
 ```
 
-**3. ติดตั้ง Dependencies**
+**3. Install dependencies**
 ```bash
-pip freeze > requirements.txt # update
 pip install -r requirements.txt
 ```
 
-**4. แก้ไข `config.py`** ให้ตรงกับพอร์ตของคุณ
+**4. Configure `config.py`** to match your portfolio
 ```python
-# จำนวนหุ้นแต่ละตัว
+# Number of shares per symbol
 CURRENT_HOLDINGS_SHARES = {
     'MSFT' : 0.0,
     'GOOGL': 0.0,
@@ -78,11 +77,11 @@ CURRENT_HOLDINGS_SHARES = {
     'QBTS' : 0.0,
 }
 
-# ทองคำ MTS-Gold — ใส่จำนวน troy oz ที่ถือ
-# 1 troy oz = 31.1035 กรัม  |  ตัวอย่าง: 5 กรัม = 5/31.1035 ≈ 0.1608 oz
+# MTS-Gold — enter total troy oz held
+# 1 troy oz = 31.1035 g  |  Example: 5g = 5/31.1035 ≈ 0.1608 oz
 MTS_GOLD_OZ = 0.0
 
-# งบ DCA ต่อเดือน
+# Monthly DCA budget
 MONTHLY_DCA_BUDGET_USD = 45.00
 ```
 
@@ -90,23 +89,28 @@ MONTHLY_DCA_BUDGET_USD = 45.00
 
 ## 🚀 Usage
 
-### 1. วิเคราะห์พอร์ตปัจจุบัน
+### 1. Analyze current portfolio
 
 ```bash
-# รันปกติ (ใช้ disk cache ถ้ามี)
+# Standard run (uses disk cache if available)
 python run.py
 
-# โหมดทดสอบ — แสดงผล console เท่านั้น ไม่บันทึกไฟล์ใด
-python run.py --clear-cache   # ลบ cache ทั้งหมดแล้ว download ใหม่
-python run.py --no-cache      # ข้าม cache ครั้งนี้ (ไม่ลบ ไม่บันทึก)
-python run.py --no-record     # ข้ามการบันทึก performance history
-python run.py --dry-run       # แสดงผลใน console เท่านั้น ไม่บันทึกไฟล์ใดเลย
+# Force re-download — clears all cache then fetches fresh data
+python run.py --clear-cache
+
+# Skip cache this run (does not delete or save cache)
+python run.py --no-cache
+
+# Skip recording performance history
+python run.py --no-record
+
+# Dry run — console output only, no files written
+python run.py --dry-run
 ```
 
-### 2. ทดสอบย้อนหลัง (Backtesting)
+### 2. Run backtesting
 
 ```bash
-# รันจำลองการลงทุนเพื่อดูประสิทธิภาพของ Logic
 python backtest.py
 ```
 
@@ -114,30 +118,31 @@ python backtest.py
 
 ## 📊 Output
 
-| ไฟล์ | รายละเอียด |
-|------|-----------|
-| `Master_Portfolio_Report.xlsx` | Excel 4 sheets: Summary, Holdings, DCA_Action, Technical |
-| `portfolio_history.csv` | Snapshot รายวัน: date, total_usd, total_thb, rate, monthly_dca_usd, gold_oz, \<SYMBOL\>... |
-| `portfolio_performance.png` | Chart 4 panels: Portfolio Value / Holdings Breakdown / DCA Budget / Exchange Rate |
-| `backtest_result.png` | กราฟเปรียบเทียบผลการทดสอบย้อนหลัง Smart DCA vs Pure DCA |
+| File | Description |
+|------|-------------|
+| `Master_Portfolio_Report.xlsx` | Excel workbook: Summary, Holdings, DCA_Action, Technical |
+| `portfolio_history.csv` | Daily snapshot: date, total_usd, total_thb, rate, monthly_dca_usd, gold_oz, \<SYMBOL\>... |
+| `portfolio_performance.png` | 4-panel chart: Portfolio Value / Holdings Breakdown / DCA Budget / Exchange Rate |
+| `backtest_result.png` | Smart DCA vs Pure DCA comparison chart |
 
 ### Excel Sheets
-- **Summary** — ภาพรวม portfolio value, เป้าหมายปลายปี, required DCA, gold oz/กรัม
-- **Holdings** — จำนวน shares/oz, ราคาล่าสุด, current vs target allocation พร้อม status (color-coded)
-- **DCA_Action** — คำแนะนำ BUY/SELL/SKIP ตาม RSI + rebalance factor (color-coded)
-- **Technical** — RSI(14), MACD, Signal line ทุกหุ้น
+
+- **Summary** — Portfolio value overview, year-end target, required DCA amount, gold oz/grams
+- **Holdings** — Shares/oz held, latest price, current vs target allocation with color-coded status
+- **DCA_Action** — BUY/SELL/SKIP recommendations based on RSI + rebalance factor (color-coded)
+- **Technical** — RSI(14), MACD, and Signal line for every asset
 
 ---
 
 ## 🎯 Target Portfolio
 
-| Symbol | Target % | Asset Type | หมายเหตุ |
-|--------|----------|-----------|---------|
+| Symbol | Target % | Asset Type | Notes |
+|--------|----------|------------|-------|
 | MSFT   | 18%      | AI & Cloud | |
 | GOOGL  | 14%      | AI & Search | |
 | ASML   | 12%      | Chip Equipment | |
 | TSM    | 12%      | Chip Manufacturing | |
-| GLD    | 13%      | Gold Safe Haven | **MTS-Gold** (proxy GLD price/oz) |
+| GLD    | 13%      | Gold Safe Haven | **MTS-Gold** (proxy via GLD price/oz) |
 | NVDA   | 6%       | AI GPU | |
 | RGTI   | 6%       | Quantum (Growth) | |
 | JNJ    | 5%       | Healthcare | |
@@ -147,38 +152,34 @@ python backtest.py
 
 ---
 
-## 📈 ผลการทดสอบย้อนหลัง (Backtest Results)
+## 📈 Backtest Results
 
-จากการจำลองลงทุนตั้งแต่วันที่ 2021-01-01 ถึง ปัจจุบัน (งบ $45/เดือน):
+Simulated from **2021-01-01** to present with a $45/month budget:
 
-- **เงินต้นทั้งหมด (Total Invested):** $2,880.00
-- **Pure DCA Value:** $9,662.03 (ซื้อเท่ากันทุกตัวทุกเดือน)
-- **Smart DCA Value:** $11,041.02 (ใช้ระบบวิเคราะห์นี้)
-- 🏆 **Alpha:** ระบบสามารถสร้างผลตอบแทนชนะตลาดได้มากกว่าปกติ **+$1,378.99 (+14.2%)**
+| Metric | Value |
+|--------|-------|
+| Total Invested | $2,880.00 |
+| Pure DCA Value | $9,662.03 |
+| Smart DCA Value | $11,041.02 |
+| 🏆 Alpha | **+$1,378.99 (+14.2%)** |
 
 ---
 
-## 🥇 ทองคำ MTS-Gold
+## 🥇 MTS-Gold
 
-ระบบใช้ **GLD** (SPDR Gold Shares ETF) เป็น proxy ราคาทองคำสากล เพื่อความเสถียรของข้อมูลย้อนหลัง เนื่องจาก MTS-Gold ไม่มี ticker ใน yfinance
+The system uses **GLD** (SPDR Gold Shares ETF) as a gold price proxy for historical data stability, since MTS-Gold has no yfinance ticker.
 
-- **หน่วย: troy oz** (1 troy oz = 31.1035 กรัม)
-- **อัปเดต:** แก้ไขค่า `MTS_GOLD_OZ` ใน `config.py` ตามจำนวนกรัมที่ถืออยู่จริง (กรัม ÷ 31.1035)
+- **Unit: troy oz** (1 troy oz = 31.1035 g)
+- Update `MTS_GOLD_OZ` in `config.py` whenever you purchase additional gold
 
+**Grams → oz conversion:**
 ```
-มูลค่าทอง (USD) = MTS_GOLD_OZ × GLD_price_per_troy_oz
+oz = grams ÷ 31.1035
+Example: 5g = 5 ÷ 31.1035 ≈ 0.160754 oz
 ```
-
-**แปลงกรัม → oz:**
-```
-oz = กรัม ÷ 31.1035
-ตัวอย่าง: 5 กรัม = 5 ÷ 31.1035 ≈ 0.160754 oz
-```
-
-**วิธีอัปเดต:** แก้ `MTS_GOLD_OZ` ใน `config.py` ทุกครั้งที่ซื้อทองเพิ่ม
 
 ```python
-MTS_GOLD_OZ = 0.0   # ตัวอย่าง: ทอง 5 กรัม
+MTS_GOLD_OZ = 0.0   # Example: 5 grams of gold
 ```
 
 ---
@@ -187,41 +188,37 @@ MTS_GOLD_OZ = 0.0   # ตัวอย่าง: ทอง 5 กรัม
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `CURRENT_HOLDINGS_SHARES` | dict | จำนวนหุ้นแต่ละ symbol (ดูจาก Dime app) |
-| `MTS_GOLD_OZ` | `0.0` | จำนวน troy oz ทอง MTS-Gold ที่ถือ |
-| `MONTHLY_DCA_BUDGET_USD` | `46.22` | งบ DCA ต่อเดือน (USD) |
+| `CURRENT_HOLDINGS_SHARES` | dict | Shares held per symbol |
+| `MTS_GOLD_OZ` | `0.0` | Troy oz of MTS-Gold held |
+| `MONTHLY_DCA_BUDGET_USD` | `46.22` | Monthly DCA budget (USD) |
 | `RSI_PERIOD` | `14` | RSI lookback period |
 | `RSI_OVERSOLD` | `30` | RSI buy zone threshold |
 | `RSI_OVERBOUGHT` | `70` | RSI sell zone threshold |
 | `MACD_FAST/SLOW/SIGNAL` | `12/26/9` | MACD parameters |
 | `DATA_PERIOD` | `12mo` | Historical data period |
-| `REBALANCE_TOLERANCE` | `0.5%` | Tolerance before rebalancing |
+| `REBALANCE_TOLERANCE` | `0.5%` | Tolerance before triggering rebalance |
 | `ANNUAL_GROWTH_TARGET` | `12%` | Year-end growth target |
 
 ---
 
 ## 📋 Action Signal Logic
 
-ระบบประเมินสถานะหุ้นแต่ละตัวผ่านเงื่อนไขที่ซับซ้อนเพื่อให้ได้จังหวะการลงทุนที่ดีที่สุด:
+| Signal | Meaning | Condition |
+|--------|---------|-----------|
+| 🟢🟢 **STRONG BUY** | High-advantage entry point | Underweight + (Oversold or Low P/E) + MACD Bullish / EMA Support |
+| 🟢 **BUY** | Accumulate more | Underweight + Uptrend or near EMA 26 support |
+| 🔵 **DCA** | Maintain discipline | On-target allocation or Hedge asset (Gold) |
+| 🟣 **HOLD** | Pause contributions | Overweight or price running too hot (Overbought / Expensive) |
+| 🔴 **SELL** | Take profit | Severely overweight (>5%) + RSI > 80 (Extreme Overbought) |
 
-| Signal | ความหมาย | Condition (Technical + Fundamental) |
-|--------|----------|--------------------------------------|
-| 🟢🟢 **STRONG BUY** | จุดซื้อที่ได้เปรียบสูง | Underweight + (Oversold หรือ P/E ต่ำ) + MACD Bullish/EMA Support |
-| 🟢 **BUY** | สะสมเพิ่ม | Underweight + แนวโน้มขาขึ้น หรือ อยู่ใกล้แนวรับ EMA 26 |
-| 🔵 **DCA** | รักษาวินัย | สัดส่วนตามเป้า (On Target) หรือเป็นสินทรัพย์ Hedge (Gold) |
-| 🟣 **HOLD** | หยุดเติมเงิน | Overweight (สัดส่วนเกิน) หรือ ราคาวิ่งแรงเกินไป (Overbought/Expensive) |
-| 🔴 **SELL** | ขายทำกำไร | Overweight รุนแรง (> 5%) + RSI > 80 (Extreme Overbought) |
-
-> ระบบจะแสดง **ACTION ALERTS** สรุป STRONG BUY และ SELL ท้าย console โดยอัตโนมัติ
+> The system automatically prints **ACTION ALERTS** summarizing STRONG BUY and SELL signals at the end of each console run.
 
 ---
 
 ## 💾 Cache System
 
-- **Disk cache** — ราคาหุ้นบันทึกเป็น CSV ใน `data/cache/`  
-  valid ถ้า modified date = วันนี้ → ไม่ hit yfinance ซ้ำในวันเดิม
-- **In-memory cache** — indicators คำนวณครั้งเดียวต่อ session  
-  ลด API call จาก 22 → 11 ครั้ง
+- **Disk cache** — Stock prices saved as CSV in `data/cache/`; valid if the file's modified date is today, preventing duplicate yfinance calls within the same day
+- **In-memory cache** — Indicators computed once per session, reducing API calls from 22 → 11
 
 ---
 
@@ -233,10 +230,16 @@ pandas, numpy, yfinance, openpyxl, matplotlib, requests, rich, unicodedata
 
 ---
 
-## 🔄 Workflow รายเดือน
+## 🔄 Monthly Workflow
 
-1. ซื้อหุ้น/ทองผ่าน applications ตามสัญญาณ DCA
-2. อัปเดต `CURRENT_HOLDINGS_SHARES` และ `MTS_GOLD_OZ` ใน `config.py`
-3. รัน `python run.py`
-4. ดูผลใน `reports/Master_Portfolio_Report.xlsx`
-5. ดู Alert ใน console — มี STRONG BUY หรือ SELL ไหม?
+1. Purchase stocks/gold via your brokerage app based on DCA signals
+2. Update `CURRENT_HOLDINGS_SHARES` and `MTS_GOLD_OZ` in `config.py`
+3. Run `python run.py`
+4. Review results in `reports/Master_Portfolio_Report.xlsx`
+5. Check console for **ACTION ALERTS** — any STRONG BUY or SELL signals?
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
