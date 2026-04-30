@@ -235,7 +235,7 @@ pandas, numpy, yfinance, openpyxl, matplotlib, requests, rich, unicodedata
 
 ## 🔄 Workflow รายเดือน
 
-1. ซื้อหุ้น/ทองผ่าน Dime app ตามสัญญาณ DCA
+1. ซื้อหุ้น/ทองผ่าน applications ตามสัญญาณ DCA
 2. อัปเดต `CURRENT_HOLDINGS_SHARES` และ `MTS_GOLD_OZ` ใน `config.py`
 3. รัน `python run.py`
 4. ดูผลใน `reports/Master_Portfolio_Report.xlsx`
