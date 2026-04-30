@@ -118,83 +118,104 @@ def print_portfolio_status(target_portfolio, current_holdings, total_value, exch
 from config import REBALANCE_TOLERANCE, RSI_OVERSOLD, RSI_OVERBOUGHT
 from src.utils import get_status_indicator
 
-# ... (ฟังก์ชันอื่นๆ ในไฟล์นี้คงเดิม) ...
+from config import RSI_OVERSOLD, RSI_OVERBOUGHT
 
 def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value, macd_val=None, signal_val=None, price=None, ema26=None):
     """
-    Generate Action Signals based on STRICT DCA Principles + Technicals (MACD/EMA/RSI) + Fundamentals (P/E).
+    Generate Action Signals with Full Risk Management, Robust None-handling, and Signal Priority.
+    Designed for Smart-DCA Portfolio (Wutthisak Boonkan).
     """
-    # 🔵 1. จัดการสินทรัพย์พิเศษ (Gold) ป้องกันโดนปัดตกไป HOLD ในกรณีที่ราคาวิ่งจน Overweight
-    if symbol == 'GC=F':
+    
+    # 🔵 1. จัดการสินทรัพย์พิเศษ (Hedge Asset)
+    # ทองคำทำหน้าที่เป็นประกันความเสี่ยง จึงเน้นวินัยการซื้อ (Disciplined DCA) ไม่ใช้กฎการขายอัตโนมัติ
+    if symbol in ['GC=F', 'GLD']:
         return "DCA 🔵", "Hedge asset (Disciplined Buy)"
 
-    diff = current_pct - target_pct
+    # 🛠️ 2. การดักจับค่า None และการคำนวณพื้นฐาน (Defensive Logic)
+    # ป้องกัน Error กรณีข้อมูลจาก API มาไม่ครบ
+    diff = (current_pct - target_pct) if (current_pct is not None and target_pct is not None) else 0
     is_underweight = diff < -0.5
-    is_overweight = diff > 2.0
+    is_overweight = diff > 2.0 # สัดส่วนเกินเป้าหมายเกิน 2% เริ่มเข้าข่าย Overweight
 
-    is_oversold = rsi_value <= RSI_OVERSOLD if rsi_value is not None else False
-    is_overbought = rsi_value >= RSI_OVERBOUGHT if rsi_value is not None else False
-
-    # 📈 2. คำนวณ Technical & Momentum (MACD, EMA)
-    macd_bullish = False
-    if macd_val is not None and signal_val is not None:
-        macd_bullish = macd_val > signal_val
-        
+    # ตรวจสอบ Technical Indicators (Default เป็น False หากไม่มีข้อมูล)
+    is_oversold = (rsi_value <= RSI_OVERSOLD) if rsi_value is not None else False
+    is_overbought = (rsi_value >= RSI_OVERBOUGHT) if rsi_value is not None else False
+    macd_bullish = (macd_val > signal_val) if (macd_val is not None and signal_val is not None) else False
+    
+    # 📏 3. Risk Metric: Volatility & Support Check (EMA 26)
     at_ema_support = False
-    if price is not None and ema26 is not None and ema26 > 0:
+    price_extreme_drop = False # สัญญาณอันตราย: ราคาหลุดแนวรับสำคัญรุนแรง
+    
+    if all(v is not None for v in [price, ema26]) and ema26 > 0:
         diff_ema = ((price - ema26) / ema26) * 100
-        # ให้อยู่ในช่วงพักฐานหรือแนวรับ (-2% ถึง 5% จากเส้น EMA26)
-        if -2 <= diff_ema <= 5:
-            at_ema_support = True
+        # ช่วงพักฐานที่เหมาะสม (-2% ถึง 5% จากเส้น EMA26)
+        at_ema_support = -2 <= diff_ema <= 5
+        # Risk Management: หากราคาต่ำกว่า EMA26 เกิน 10% ถือว่าผิดปกติ (Panic/Trend Change)
+        if diff_ema < -10:
+            price_extreme_drop = True
 
-    # 🔍 3. วิเคราะห์ความถูก/แพงจากค่า P/E 
+    # 🔍 4. วิเคราะห์ความถูก/แพง (Fundamental Risk)
     is_expensive = False
     is_cheap = False
-    
-    if pe_value not in [None, "N/A"]:
+    if pe_value not in [None, "N/A", ""]:
         try:
             pe = float(pe_value)
             tech_stocks = ['MSFT', 'GOOGL', 'NVDA', 'ASML', 'TSM']
             value_stocks = ['JNJ', 'PG', 'CVX']
             
             if symbol in tech_stocks:
-                if pe > 60: is_expensive = True
-                elif pe < 30: is_cheap = True
+                is_expensive = pe > 60
+                is_cheap = pe < 30
             elif symbol in value_stocks:
-                if pe > 25: is_expensive = True
-                elif pe < 15: is_cheap = True
-        except:
+                is_expensive = pe > 25
+                is_cheap = pe < 15
+        except (ValueError, TypeError):
             pass
 
-    # 🎯 4. ตัดสินใจ Action (ผสาน Technical เข้าไปใน Logic เดิม)
+    # 🎯 5. การตัดสินใจตามลำดับความสำคัญ (Decision Hierarchy)
+
+    # --- [A] RISK FIRST: CAPITAL PROTECTION ---
+    # หากราคาร่วงรุนแรงผิดปกติ ให้หยุดซื้อเพื่อรอดูสถานการณ์ (Preserve Cash)
+    if price_extreme_drop and not macd_bullish:
+        return "HOLD 🟡", "Extreme Downtrend (Stop DCA & Preserve Cash)"
+
+    # --- [B] CASE: UNDERWEIGHT (พอร์ตยังขาดหุ้นตัวนี้) ---
     if is_underweight:
-        if is_expensive and is_overbought:
-            return "BUY 🟡", "Underweight but Expensive & Overbought (Caution)"
+        # Anti-FOMO: แม้สัดส่วนจะขาด แต่ถ้าราคาวิ่งแรงจน Overbought ให้รอย่อตัวก่อน
+        if is_expensive or is_overbought:
+            return "BUY 🟡", "Underweight but Overbought/Expensive (Wait for Dip)"
         
-        # เงื่อนไข Strong Buy 🟢🟢: ต้องถูก (Oversold หรือ P/E ต่ำ) + มีโมเมนตัม (MACD Bullish หรือ EMA Support)
-        elif (is_cheap or is_oversold) and (macd_bullish or at_ema_support):
+        # 🟢🟢 STRONG BUY: จุดเข้าซื้อที่ความเสี่ยงต่ำและมีพลังส่งสูง
+        # เงื่อนไข: (ต้องมีโมเมนตัม) และ (ต้องถูกหรือ Oversold) และ (ต้องไม่ Overbought)[cite: 1]
+        if (macd_bullish or at_ema_support) and (is_cheap or is_oversold) and not is_overbought:
             return "STRONG BUY 🟢🟢", "Undervalued/Oversold + Bullish Momentum"
         
-        elif is_cheap or is_oversold:
-            return "BUY 🟢", "Accumulate (Undervalued or Oversold)"
-        elif macd_bullish or at_ema_support:
+        # 🟢 BUY ปกติ: สะสมเมื่อสัดส่วนขาดและมีสัญญาณบวกบางส่วน
+        if macd_bullish or at_ema_support:
             return "BUY 🟢", "Accumulate (Underweight + Bullish/Support)"
-        else:
-            return "BUY 🟡", "Accumulate (Underweight, Neutral Trend)"
+        if is_cheap or is_oversold:
+            return "BUY 🟢", "Accumulate (Undervalued or Oversold)"
+            
+        return "BUY 🟡", "Accumulate (Underweight, Neutral Trend)"
     
+    # --- [C] CASE: OVERWEIGHT (พอร์ตบวมเกินเป้า) ---
     elif is_overweight:
+        # Profit Harvesting: ขายทำกำไรเมื่อบวมมาก (>5%) และราคาร้อนแรงสุดขีด[cite: 1]
+        if is_overbought and diff > 5.0:
+            return "SELL 🔴", "Extreme Overweight + Overbought (Take Profit)"
+        
+        # Risk Reduction: หยุดเติมเงินในหุ้นที่แพงหรือ Overbought[cite: 1]
         if (is_expensive or is_overbought) and not macd_bullish:
-            # เกินเป้า + แพง/Overbought + ขาลง = ควรพิจารณา Take Profit หรือ HOLD อย่างเคร่งครัด
-            if diff > 5.0 and is_overbought: 
-                return "SELL 🔴", "Extreme Overweight + Overbought (Take Profit)"
-            return "HOLD ⚪", "Overvalued + Overbought (Wait/Redirect funds)"
-        else:
-            return "HOLD ⚪", "Overweight (Redirect DCA funds)"
+            return "HOLD ⚪", "Risk Reduction: Overvalued (Wait for Rebalance)"
+            
+        return "HOLD ⚪", "Overweight (Redirect DCA funds to Underweight assets)"
     
-    else: # On Target
-        if is_cheap and macd_bullish:
+    # --- [D] CASE: ON TARGET (สัดส่วนพอร์ตสมดุล) ---
+    else:
+        # รักษาพอร์ตตามวินัย (Maintenance DCA)
+        if is_cheap and macd_bullish and not is_overbought:
             return "DCA 🟢", "Price is cheap + Bullish (Regular DCA)"
         elif is_expensive or is_overbought:
             return "DCA 🟡", "Price is high but maintain DCA"
-        else:
-            return "DCA 🔵", "Maintain discipline (Regular DCA)"
+            
+        return "DCA 🔵", "Maintain discipline (Regular DCA)"
