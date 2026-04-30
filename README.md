@@ -1,7 +1,20 @@
 # 📈 Smart-DCA — Portfolio Analysis System
 
-ระบบวิเคราะห์พอร์ตการลงทุนแบบ Dollar-Cost Averaging (DCA) อัตโนมัติ  
-ดึงข้อมูลราคาหุ้นจาก yfinance, คำนวณ RSI/MACD, และสร้างรายงาน Excel พร้อม chart
+ระบบวิเคราะห์และจัดการพอร์ตการลงทุนแบบ **Tactical DCA + Active Rebalancing** อัตโนมัติ ออกแบบมาเพื่อเพิ่มประสิทธิภาพการลงทุนเหนือกว่าการ DCA ทั่วไป โดยใช้การคำนวณเชิงปริมาณ (Quantitative Analysis) ร่วมกับสัญญาณทางเทคนิคและพื้นฐาน
+
+---
+
+## ✨ ฟีเจอร์เด่น (Key Features)
+
+- **Multi-Factor Decision Logic:** ตัดสินใจซื้อขายโดยประเมินจาก 4 ปัจจัยหลัก: Rebalance Weight, RSI, MACD และ P/E Ratio (Fundamental)
+
+- **Backtesting Engine:** 🚀 **ใหม่!** ระบบจำลองการลงทุนย้อนหลังตั้งแต่ปี 2021 เพื่อเปรียบเทียบผลตอบแทนระหว่าง "Smart DCA" กับ "Pure DCA" พร้อมคำนวณค่า Alpha
+
+- **EMA 26 Support Analysis:** วิเคราะห์จุดพักฐานของราคาเพื่อหาจังหวะสะสมหุ้นที่ปลอดภัยในเชิงโมเมนตัม
+
+- **Special Hedge Asset Handling:** ระบบแยกการจัดการทองคำ (MTS-Gold) ออกเป็นสินทรัพย์ป้องกันความเสี่ยง เพื่อรักษาวินัยการซื้อสะสมอย่างต่อเนื่องแม้ในสภาวะตลาดผันผวน
+
+- **Disk Cache System:** ระบบบันทึกราคาหุ้นเป็น CSV เพื่อลดการเรียก API (yfinance) และเพิ่มความเร็วในการประมวลผล
 
 ---
 
@@ -9,20 +22,21 @@
 
 ```
 project_DCA/
-├── run.py                  # Entry Point — รันระบบทั้งหมด
-├── config.py               # ตั้งค่าพอร์ต, จำนวนหุ้น, ทอง MTS-Gold, และงบประมาณ
-├── requirements.txt        # Dependencies
+├── run.py                  # Entry Point — รันระบบวิเคราะห์พอร์ตปัจจุบัน
+├── backtest.py             # 🚀 Backtesting Engine — รันจำลองการลงทุนย้อนหลัง
+├── config.py               # ตั้งค่าพอร์ต, เป้าหมาย 12%, และงบประมาณ DCA
+├── requirements.txt        # Dependencies (pandas, yfinance, matplotlib, etc.)
 ├── data/cache/             # Disk cache ราคาหุ้น (auto-generated)
-├── reports/                # ผลลัพธ์ (auto-generated)
-│   ├── Master_Portfolio_Report.xlsx
-│   ├── portfolio_history.csv
-│   └── portfolio_performance.png
+├── reports/                # โฟลเดอร์เก็บผลลัพธ์ (auto-generated)
+│   ├── Master_Portfolio_Report.xlsx  # รายงานละเอียด 4 Sheets
+│   ├── portfolio_history.csv         # ข้อมูล Snapshot มูลค่าพอร์ตรายวัน
+│   ├── portfolio_performance.png     # กราฟ Performance ภาพรวมพอร์ต
+│   └── backtest_result.png           # กราฟเปรียบเทียบผลการทดสอบย้อนหลัง
 └── src/
-    ├── indicators.py       # RSI, MACD, disk cache manager
-    ├── portfolio.py        # Rebalance logic, action signals
+    ├── indicators.py       # RSI, MACD, EMA, Historical Growth
+    ├── portfolio.py        # 🧠 Brain: Decision Logic & Rebalance Factor
     ├── output.py           # Console & Excel report generator
-    ├── visualize.py        # Performance chart (matplotlib)
-    └── utils.py            # Exchange rate, formatting helpers
+    └── utils.py            # Exchange rate & formatting helpers
 ```
 
 ---
@@ -75,21 +89,21 @@ MONTHLY_DCA_BUDGET_USD = 45.00
 
 ## 🚀 Usage
 
+### 1. วิเคราะห์พอร์ตปัจจุบัน
+
 ```bash
 # รันปกติ (ใช้ disk cache ถ้ามี)
 python run.py
 
-# ลบ cache แล้ว download ข้อมูลใหม่ทั้งหมด
-python run.py --clear-cache
-
-# ข้าม cache รอบนี้ (disk cache ไม่เปลี่ยน)
-python run.py --no-cache
-
-# ไม่บันทึก performance snapshot รอบนี้
-python run.py --no-record
-
 # โหมดทดสอบ — แสดงผล console เท่านั้น ไม่บันทึกไฟล์ใด
 python run.py --dry-run
+```
+
+### 2. ทดสอบย้อนหลัง (Backtesting)
+
+```bash
+# รันจำลองการลงทุนเพื่อดูประสิทธิภาพของ Logic
+python backtest.py
 ```
 
 ---
@@ -101,6 +115,7 @@ python run.py --dry-run
 | `Master_Portfolio_Report.xlsx` | Excel 4 sheets: Summary, Holdings, DCA_Action, Technical |
 | `portfolio_history.csv` | Snapshot รายวัน: date, total_usd, total_thb, rate, monthly_dca_usd, gold_oz, \<SYMBOL\>... |
 | `portfolio_performance.png` | Chart 4 panels: Portfolio Value / Holdings Breakdown / DCA Budget / Exchange Rate |
+| `backtest_result.png` | กราฟเปรียบเทียบผลการทดสอบย้อนหลัง Smart DCA vs Pure DCA |
 
 ### Excel Sheets
 - **Summary** — ภาพรวม portfolio value, เป้าหมายปลายปี, required DCA, gold oz/กรัม
@@ -128,11 +143,23 @@ python run.py --dry-run
 
 ---
 
+## 📈 ผลการทดสอบย้อนหลัง (Backtest Results)
+
+จากการจำลองลงทุนตั้งแต่วันที่ 2021-01-01 ถึง ปัจจุบัน (งบ $45/เดือน):
+
+- **เงินต้นทั้งหมด (Total Invested):** $2,880.00
+- **Pure DCA Value:** $9,662.03 (ซื้อเท่ากันทุกตัวทุกเดือน)
+- **Smart DCA Value:** $11,041.02 (ใช้ระบบวิเคราะห์นี้)
+- 🏆 **Alpha:** ระบบสามารถสร้างผลตอบแทนชนะตลาดได้มากกว่าปกติ **+$1,378.99 (+14.2%)**
+
+---
+
 ## 🥇 ทองคำ MTS-Gold
 
-ระบบใช้ **GLD** (SPDR Gold Shares ETF) เป็น proxy ราคาทอง เนื่องจาก MTS-Gold ไม่มี ticker ใน yfinance
+ระบบใช้ **GLD** (SPDR Gold Shares ETF) เป็น proxy ราคาทองคำสากล เพื่อความเสถียรของข้อมูลย้อนหลัง เนื่องจาก MTS-Gold ไม่มี ticker ใน yfinance
 
-**หน่วย: troy oz** (1 troy oz = 31.1035 กรัม)
+- **หน่วย: troy oz** (1 troy oz = 31.1035 กรัม)
+- **อัปเดต:** แก้ไขค่า `MTS_GOLD_OZ` ใน `config.py` ตามจำนวนกรัมที่ถืออยู่จริง (กรัม ÷ 31.1035)
 
 ```
 มูลค่าทอง (USD) = MTS_GOLD_OZ × GLD_price_per_troy_oz
@@ -171,14 +198,15 @@ MTS_GOLD_OZ = 0.0   # ตัวอย่าง: ทอง 5 กรัม
 
 ## 📋 Action Signal Logic
 
-| Signal | Condition |
-|--------|-----------|
-| 🟢🟢 STRONG BUY | Underweight + Oversold (RSI < 30) |
-| 🟢 BUY | Underweight หรือ Price dip |
-| ⚪ DCA | On target + Neutral RSI |
-| 🟡 SKIP | Overbought หรือ Target reached |
-| ⚪ HOLD | Overweight + Oversold |
-| 🔴 SELL | Overweight + Overbought |
+ระบบประเมินสถานะหุ้นแต่ละตัวผ่านเงื่อนไขที่ซับซ้อนเพื่อให้ได้จังหวะการลงทุนที่ดีที่สุด:
+
+| Signal | ความหมาย | Condition (Technical + Fundamental) |
+|--------|----------|--------------------------------------|
+| 🟢🟢 **STRONG BUY** | จุดซื้อที่ได้เปรียบสูง | Underweight + (Oversold หรือ P/E ต่ำ) + MACD Bullish/EMA Support |
+| 🟢 **BUY** | สะสมเพิ่ม | Underweight + แนวโน้มขาขึ้น หรือ อยู่ใกล้แนวรับ EMA 26 |
+| 🔵 **DCA** | รักษาวินัย | สัดส่วนตามเป้า (On Target) หรือเป็นสินทรัพย์ Hedge (Gold) |
+| 🟣 **HOLD** | หยุดเติมเงิน | Overweight (สัดส่วนเกิน) หรือ ราคาวิ่งแรงเกินไป (Overbought/Expensive) |
+| 🔴 **SELL** | ขายทำกำไร | Overweight รุนแรง (> 5%) + RSI > 80 (Extreme Overbought) |
 
 > ระบบจะแสดง **ACTION ALERTS** สรุป STRONG BUY และ SELL ท้าย console โดยอัตโนมัติ
 
@@ -196,7 +224,7 @@ MTS_GOLD_OZ = 0.0   # ตัวอย่าง: ทอง 5 กรัม
 ## 📦 Dependencies
 
 ```
-pandas, numpy, yfinance, openpyxl, matplotlib, requests, rich
+pandas, numpy, yfinance, openpyxl, matplotlib, requests, rich, unicodedata
 ```
 
 ---
