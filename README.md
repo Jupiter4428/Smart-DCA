@@ -8,7 +8,7 @@ An automated **Tactical DCA + Active Rebalancing** portfolio analysis system des
 
 - **Multi-Factor Decision Logic** — Investment decisions evaluated across 4 core factors: Rebalance Weight, RSI, MACD, and P/E Ratio (Fundamental)
 
-- **Backtesting Engine** 🚀 — Simulates historical investment performance from 2021 onward, comparing returns between Smart DCA and Pure DCA strategies, including Alpha calculation
+- **Backtesting Engine** — Simulates historical investment performance from 2021 onward, comparing returns between Smart DCA and Pure DCA strategies, including Alpha calculation
 
 - **EMA 26 Support Analysis** — Detects price consolidation zones to identify safe accumulation opportunities based on momentum
 
@@ -23,7 +23,7 @@ An automated **Tactical DCA + Active Rebalancing** portfolio analysis system des
 ```
 smart_dca/
 ├── run.py                  # Entry Point — runs the current portfolio analysis
-├── backtest.py             # 🚀 Backtesting Engine — simulates historical investment
+├── backtest.py             # Backtesting Engine — simulates historical investment
 ├── config.py               # Portfolio settings, 12% annual target, and DCA budget
 ├── requirements.txt        # Dependencies (pandas, yfinance, matplotlib, etc.)
 ├── data/cache/             # Disk cache for stock prices (auto-generated)
@@ -34,7 +34,7 @@ smart_dca/
 │   └── backtest_result.png           # Backtesting comparison chart
 └── src/
     ├── indicators.py       # RSI, MACD, EMA, Historical Growth
-    ├── portfolio.py        # 🧠 Brain: Decision Logic & Rebalance Factor
+    ├── portfolio.py        # Brain: Decision Logic & Rebalance Factor
     ├── output.py           # Console & Excel report generator
     └── utils.py            # Exchange rate & formatting helpers
 ```
@@ -161,11 +161,11 @@ Simulated from **2021-01-01** to present with a $45/month budget:
 | Total Invested | $2,880.00 |
 | Pure DCA Value | $9,662.03 |
 | Smart DCA Value | $11,041.02 |
-| 🏆 Alpha | **+$1,378.99 (+14.2%)** |
+| Alpha | **+$1,378.99 (+14.2%)** |
 
 ---
 
-## 🥇 MTS-Gold
+## MTS-Gold
 
 The system uses **GLD** (SPDR Gold Shares ETF) as a gold price proxy for historical data stability, since MTS-Gold has no yfinance ticker.
 
