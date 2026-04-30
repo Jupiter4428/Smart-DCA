@@ -58,12 +58,13 @@ python -m venv .venv
 
 **3. ติดตั้ง Dependencies**
 ```bash
+pip freeze > requirements.txt # update
 pip install -r requirements.txt
 ```
 
 **4. แก้ไข `config.py`** ให้ตรงกับพอร์ตของคุณ
 ```python
-# จำนวนหุ้นแต่ละตัว (ดูจาก Dime app)
+# จำนวนหุ้นแต่ละตัว
 CURRENT_HOLDINGS_SHARES = {
     'MSFT' : 0.0,
     'GOOGL': 0.0,
@@ -96,7 +97,10 @@ MONTHLY_DCA_BUDGET_USD = 45.00
 python run.py
 
 # โหมดทดสอบ — แสดงผล console เท่านั้น ไม่บันทึกไฟล์ใด
-python run.py --dry-run
+python run.py --clear-cache   # ลบ cache ทั้งหมดแล้ว download ใหม่
+python run.py --no-cache      # ข้าม cache ครั้งนี้ (ไม่ลบ ไม่บันทึก)
+python run.py --no-record     # ข้ามการบันทึก performance history
+python run.py --dry-run       # แสดงผลใน console เท่านั้น ไม่บันทึกไฟล์ใดเลย
 ```
 
 ### 2. ทดสอบย้อนหลัง (Backtesting)
