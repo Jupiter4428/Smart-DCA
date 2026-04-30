@@ -49,9 +49,9 @@ smart_dca/
 │   ├── Master_Portfolio_Report.xlsx  # Excel 4 sheets: Summary, Holdings, DCA_Action, Technical
 │   ├── portfolio_history.csv         # Snapshot รายวัน: date, total_usd, total_thb, rate,
 │   │                                 #   monthly_dca_usd, gold_grams, <SYMBOL_USD>...
-│   └── portfolio_performance.png     # Chart: Portfolio Value / Holdings Breakdown / DCA Budget
+│   ├── portfolio_performance.png     # Chart: Portfolio Value / Holdings Breakdown / DCA Budget
+│   └── backtest_result.png           # Chart: Backtesting results visualization
 └── src/                   # 🧠 Source Code หลัก
-    ├── __init__.py        # ทำให้ Python มองโฟลเดอร์นี้เป็น Package
     ├── indicators.py      # 📈 Technical Indicators + Disk Cache Manager
     │                      #    - download_historical_data(symbol, period): download + cache อัตโนมัติ
     │                      #    - calculate_rsi(close, period=14): Wilder's Smoothing RSI
@@ -83,7 +83,8 @@ smart_dca/
     │                      #    - print_reports_to_console(rate): แสดงรายงานทั้งหมดใน terminal
     │                      #    - save_all_to_excel(rate, output_dir): บันทึก Excel 4 sheets พร้อม color highlight
     │                      #    - append_performance_history(rate): บันทึก snapshot รายวัน → portfolio_history.csv
-    └── visualize.py       # 📈 Performance Chart Generator
-                           #    - visualize_performance_history(): อ่าน portfolio_history.csv
-                           #      สร้าง 3-panel chart: Total Value / Holdings Breakdown / DCA Budget
-                           #      บันทึกเป็น reports/portfolio_performance.png
+    ├── visualize.py       # 📈 Performance Chart Generator
+    │                      #    - visualize_performance_history(): อ่าน portfolio_history.csv
+    │                      #      สร้าง 3-panel chart: Total Value / Holdings Breakdown / DCA Budget
+    │                      #      บันทึกเป็น reports/portfolio_performance.png
+    └── __pycache__/       # 🗑️ Python cache directory
