@@ -115,10 +115,19 @@ def print_portfolio_status(target_portfolio, current_holdings, total_value, exch
     print(f"{'TOTAL':<8} | ฿{total_value:<14,.2f} | ${total_value_usd:<14,.2f} | {total_current/total_value*100:>8.2f}% | {'100.00':>8}% |")
     print(f"{'='*140}\n")
     
-def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value):
+from config import REBALANCE_TOLERANCE, RSI_OVERSOLD, RSI_OVERBOUGHT
+from src.utils import get_status_indicator
+
+# ... (ฟังก์ชันอื่นๆ ในไฟล์นี้คงเดิม) ...
+
+def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value, macd_val=None, signal_val=None, price=None, ema26=None):
     """
-    Generate Action Signals based on STRICT DCA Principles + Fundamentals (P/E).
+    Generate Action Signals based on STRICT DCA Principles + Technicals (MACD/EMA/RSI) + Fundamentals (P/E).
     """
+    # 🔵 1. จัดการสินทรัพย์พิเศษ (Gold) ป้องกันโดนปัดตกไป HOLD ในกรณีที่ราคาวิ่งจน Overweight
+    if symbol == 'GC=F':
+        return "DCA 🔵", "Hedge asset (Disciplined Buy)"
+
     diff = current_pct - target_pct
     is_underweight = diff < -0.5
     is_overweight = diff > 2.0
@@ -126,7 +135,19 @@ def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value):
     is_oversold = rsi_value <= RSI_OVERSOLD if rsi_value is not None else False
     is_overbought = rsi_value >= RSI_OVERBOUGHT if rsi_value is not None else False
 
-    # 🔍 1. วิเคราะห์ความถูก/แพงจากค่า P/E
+    # 📈 2. คำนวณ Technical & Momentum (MACD, EMA)
+    macd_bullish = False
+    if macd_val is not None and signal_val is not None:
+        macd_bullish = macd_val > signal_val
+        
+    at_ema_support = False
+    if price is not None and ema26 is not None and ema26 > 0:
+        diff_ema = ((price - ema26) / ema26) * 100
+        # ให้อยู่ในช่วงพักฐานหรือแนวรับ (-2% ถึง 5% จากเส้น EMA26)
+        if -2 <= diff_ema <= 5:
+            at_ema_support = True
+
+    # 🔍 3. วิเคราะห์ความถูก/แพงจากค่า P/E 
     is_expensive = False
     is_cheap = False
     
@@ -145,27 +166,35 @@ def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value):
         except:
             pass
 
-    # 🎯 2. ตัดสินใจ Action
+    # 🎯 4. ตัดสินใจ Action (ผสาน Technical เข้าไปใน Logic เดิม)
     if is_underweight:
-        if is_expensive:
-            return "BUY 🟡", "Accumulate (Underweight but High P/E)"
-        elif is_cheap and is_oversold:
-            return "STRONG BUY 🟢🟢", "Undervalued (Low P/E) + Oversold"
-        elif is_cheap:
-            return "BUY 🟢", "Accumulate (Underweight & Low P/E)"
+        if is_expensive and is_overbought:
+            return "BUY 🟡", "Underweight but Expensive & Overbought (Caution)"
+        
+        # เงื่อนไข Strong Buy 🟢🟢: ต้องถูก (Oversold หรือ P/E ต่ำ) + มีโมเมนตัม (MACD Bullish หรือ EMA Support)
+        elif (is_cheap or is_oversold) and (macd_bullish or at_ema_support):
+            return "STRONG BUY 🟢🟢", "Undervalued/Oversold + Bullish Momentum"
+        
+        elif is_cheap or is_oversold:
+            return "BUY 🟢", "Accumulate (Undervalued or Oversold)"
+        elif macd_bullish or at_ema_support:
+            return "BUY 🟢", "Accumulate (Underweight + Bullish/Support)"
         else:
-            return "BUY 🟢", "Accumulate (Underweight)"
+            return "BUY 🟡", "Accumulate (Underweight, Neutral Trend)"
     
     elif is_overweight:
-        if is_expensive and is_overbought:
-            return "HOLD ⚪", "Overvalued + Overbought (Wait)"
+        if (is_expensive or is_overbought) and not macd_bullish:
+            # เกินเป้า + แพง/Overbought + ขาลง = ควรพิจารณา Take Profit หรือ HOLD อย่างเคร่งครัด
+            if diff > 5.0 and is_overbought: 
+                return "SELL 🔴", "Extreme Overweight + Overbought (Take Profit)"
+            return "HOLD ⚪", "Overvalued + Overbought (Wait/Redirect funds)"
         else:
             return "HOLD ⚪", "Overweight (Redirect DCA funds)"
     
-    else: 
-        if is_cheap:
-            return "DCA 🟢", "Price is cheap (Regular DCA)"
-        elif is_expensive:
+    else: # On Target
+        if is_cheap and macd_bullish:
+            return "DCA 🟢", "Price is cheap + Bullish (Regular DCA)"
+        elif is_expensive or is_overbought:
             return "DCA 🟡", "Price is high but maintain DCA"
         else:
             return "DCA 🔵", "Maintain discipline (Regular DCA)"

@@ -3,7 +3,7 @@
 =====================
 Console and Excel report generation for the DCA Portfolio System.
 """
-
+import unicodedata
 import pandas as pd
 import os
 import csv
@@ -11,6 +11,7 @@ from datetime import datetime
 from openpyxl.styles import PatternFill, Font
 from openpyxl.utils import get_column_letter
 
+# เพิ่ม ANNUAL_GROWTH_TARGET เข้าไปในลิสต์การ import จาก config
 from config import (
     TARGET_PORTFOLIO,
     CURRENT_HOLDINGS_SHARES,
@@ -21,6 +22,7 @@ from config import (
     RSI_OVERSOLD,
     RSI_OVERBOUGHT,
     AVERAGE_COST_USD,
+    ANNUAL_GROWTH_TARGET  # <--- เพิ่มตัวนี้
 )
 from src.indicators import (
     download_historical_data, 
@@ -138,19 +140,9 @@ def generate_portfolio_summary(rate: float) -> pd.DataFrame:
     total_usd    = _get_total_portfolio_usd(holdings_usd)
     total_thb    = total_usd * rate
 
-    total_weighted_growth = 0.0
-    for symbol, target_pct in TARGET_PORTFOLIO.items():
-        ind = get_cached_indicators(symbol)
-        if ind and 'df' in ind:
-            df = ind['df']
-            if len(df) >= 2:
-                start_price = df['Close'].iloc[0]
-                end_price = df['Close'].iloc[-1]
-                historical_growth = (end_price - start_price) / start_price
-                total_weighted_growth += (historical_growth * (target_pct / 100))
-
-    dynamic_annual_target = total_weighted_growth if total_weighted_growth != 0 else 0.12
-    monthly_rate = dynamic_annual_target / 12
+    # 🔥 แก้ไข: ใช้ ANNUAL_GROWTH_TARGET จาก config แบบนิ่งๆ ป้องกันเป้าหมายแกว่งตามระยะเวลา cache ย้อนหลัง
+    annual_target = ANNUAL_GROWTH_TARGET
+    monthly_rate = annual_target / 12
 
     fv_current = total_usd * ((1 + monthly_rate) ** REMAINING_MONTHS)
     fv_dca = MONTHLY_DCA_BUDGET_USD * (((1 + monthly_rate) ** REMAINING_MONTHS - 1) / monthly_rate)
@@ -158,7 +150,8 @@ def generate_portfolio_summary(rate: float) -> pd.DataFrame:
     target_end_thb = target_end_usd * rate
 
     denominator = (((1 + monthly_rate) ** REMAINING_MONTHS - 1) / monthly_rate)
-    req_dca_usd = (target_end_usd - fv_current) / denominator
+    # กัน error กรณี denominator = 0
+    req_dca_usd = (target_end_usd - fv_current) / denominator if denominator > 0 else 0
 
     gcf_ind = get_cached_indicators('GC=F')
     gcf_price_str = f"${gcf_ind['price']:,.2f}/oz" if gcf_ind else "N/A"
@@ -169,7 +162,7 @@ def generate_portfolio_summary(rate: float) -> pd.DataFrame:
             'Timestamp',
             'Total Portfolio Value (USD / THB)',
             'Exchange Rate (THB/USD)',
-            'Dynamic Annual Growth Target (Based on History)',
+            'Annual Growth Target (Config)',
             'Monthly DCA Budget (USD / THB)',
             'Remaining Months',
             'Target End Year Value (USD / THB)',
@@ -180,7 +173,7 @@ def generate_portfolio_summary(rate: float) -> pd.DataFrame:
             datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             f"${total_usd:,.2f}  /  ฿{total_thb:,.2f}",
             f"{rate:.2f}",
-            f"{dynamic_annual_target * 100:.2f}%",
+            f"{annual_target * 100:.2f}%",
             f"${MONTHLY_DCA_BUDGET_USD:,.2f}  /  ฿{MONTHLY_DCA_BUDGET_USD * rate:,.2f}",
             REMAINING_MONTHS,
             f"${target_end_usd:,.2f}  /  ฿{target_end_thb:,.2f}",
@@ -241,11 +234,30 @@ def generate_dca_action_report(rate: float) -> pd.DataFrame:
     symbol_actions = {}
     for symbol, target_pct in TARGET_PORTFOLIO.items():
         ind = get_cached_indicators(symbol)
+        
+        # ดึงค่า Indicators ออกมาเตรียมส่งให้ get_action_signal
         rsi = ind['rsi'] if ind else None
+        macd_val = ind['macd'] if ind else None
+        signal_val = ind['signal'] if ind else None
+        price = ind['price'] if ind else 0.0
+        
+        # คำนวณ EMA26 เพื่อส่งให้ระบบตัดสินใจ
+        ema26 = None
+        if ind and 'df' in ind:
+            ema_series = calculate_ema(ind['df']['Close'], 26)
+            ema26 = ema_series.iloc[-1]
+
         pe_val = get_cached_pe(symbol)
         curr_pct = (holdings_usd.get(symbol, 0.0) / total_usd * 100) if total_usd > 0 else 0.0
-        action, reason = get_action_signal(symbol, curr_pct, target_pct, rsi, pe_val)
-        symbol_actions[symbol] = {'action': action, 'reason': reason, 'rsi': rsi, 'price': ind['price'] if ind else 0.0}
+        
+        # 🔥 แก้ไข: ส่ง parameter ครบถ้วนตาม signature ใหม่
+        action, reason = get_action_signal(
+            symbol, curr_pct, target_pct, rsi, pe_val,
+            macd_val=macd_val, signal_val=signal_val,
+            price=price, ema26=ema26
+        )
+        
+        symbol_actions[symbol] = {'action': action, 'reason': reason, 'rsi': rsi, 'price': price}
 
     eligible_symbols = [s for s, d in symbol_actions.items() if "HOLD" not in d['action'] and "SKIP" not in d['action']]
     f_sum = sum(rebalance_factors[s] for s in eligible_symbols)
@@ -256,7 +268,6 @@ def generate_dca_action_report(rate: float) -> pd.DataFrame:
         final_usd = (MONTHLY_DCA_BUDGET_USD * (rebalance_factors[symbol] / f_sum)) if symbol in eligible_symbols and f_sum > 0 else 0.0
         total_dca_usd += final_usd
         
-        # ใช้ชื่อคีย์ให้สั้นและตรงกับฟังก์ชัน print
         rows.append({
             'Symbol': _display_name(symbol), 
             'Price': f"${data['price']:,.2f}", 
@@ -297,14 +308,14 @@ def generate_technical_report() -> pd.DataFrame:
         else:
             ema_status = "At Support 🛡️" # พักฐานใกล้เส้น (จุดสะสม)
 
-        # --- RSI Ranging Logic ---
+        # --- RSI Ranging Logic (Same format as EMA Signal) ---
         rsi_val = ind['rsi']
         if rsi_val > 70:
-            rsi_sig = "Overbought 🔴"
+            rsi_sig = "Overbought 🔴"      # Price stretched up (Caution)
         elif rsi_val < 30:
-            rsi_sig = "Oversold 🟢"
+            rsi_sig = "Oversold 🟢"        # Value zone (Accumulate)
         else:
-            rsi_sig = "Ranging ↔️"
+            rsi_sig = "Neutral 🔵"         # Normal range (Hold/DCA)
 
         rows.append({
             'Symbol': _display_name(symbol), 
@@ -322,92 +333,160 @@ def generate_technical_report() -> pd.DataFrame:
 # ─────────────────────────────────────────────────────────────────
 # ✅ Action Alert Summary
 # ─────────────────────────────────────────────────────────────────
-def print_action_alerts(rate: float = 0) -> None:
-    holdings_usd = _get_current_holdings_usd()
-    total_usd    = _get_total_portfolio_usd(holdings_usd)
 
-    strong_buys = []
-    sells       = []
-
-    for symbol, target_pct in TARGET_PORTFOLIO.items():
-        ind = get_cached_indicators(symbol)
-        rsi = ind['rsi'] if ind else None
-        pe_val = get_cached_pe(symbol)
-        curr_pct = (holdings_usd.get(symbol, 0.0) / total_usd * 100) if total_usd > 0 else 0.0
-        action, reason = get_action_signal(symbol, curr_pct, target_pct, rsi, pe_val)
-
-        name = _display_name(symbol)
-        rsi_str = f"RSI {rsi:.1f}" if rsi is not None else "RSI N/A"
-
-        if "STRONG BUY" in action:
-            strong_buys.append(f"  {name:<22} {rsi_str}  — {reason}")
-        elif "SELL" in action:
-            sells.append(f"  {name:<22} {rsi_str}  — {reason}")
-
-    print("\n" + "=" * 140)
-    print("🚨 ACTION ALERTS")
-    print("=" * 140)
-
-    if strong_buys:
-        print("🟢🟢 STRONG BUY — Value Zone + Underweight:")
-        for line in strong_buys:
-            print(line)
-    else:
-        print("🟢  No STRONG BUY signals at this time.")
-
-    if sells:
-        print("\n🔴 SELL — Take Profit:")
-        for line in sells:
-            print(line)
-    else:
-        print("🔴  No SELL signals at this time.")
-
-    print("=" * 140)
-
-# ─────────────────────────────────────────────────────────────────
-# 3. ฟังก์ชันหลักสำหรับพิมพ์ออกหน้า Console 
-# ─────────────────────────────────────────────────────────────────
-def print_reports_to_console(rate: float):
-    """ฟังก์ชันพิมพ์รายงานแบบจัดช่องไฟใหม่ (FixedWidth) เพื่อให้ตารางตรงกันเป๊ะ"""
+def print_action_alerts(rate: float):
+    """ฟังก์ชันพิมพ์สรุปสัญญาณ Action Alerts โดยดึงเหตุผลจริงจากข้อมูล"""
+    print("\n" + "="*165 + "\n🚨 STRATEGIC ACTION ALERTS\n" + "="*165)
     
-    # --- 1. Portfolio Summary ---
-    print("\n" + "="*160 + "\n📋 PORTFOLIO SUMMARY\n" + "="*160)
-    for _, r in generate_portfolio_summary(rate).iterrows(): 
-        print(f"{r['Metric']:<50} {r['Value']}")
-    
-    # --- 2. Holdings Report ---
-    print("\n" + "="*160 + "\n💼 HOLDINGS REPORT\n" + "="*160)
-    h_df = generate_holdings_report(rate)
-    # กำหนดความกว้างคอลัมน์ให้คงที่เพื่อป้องกันการเลี้ยว
-    print(f"{'Symbol':<20} {'Units':<20} {'Price (USD)':<12} {'Current (USD)':<15} {'Curr %':>8} {'Tgt %':>8} {'Status'}")
-    print("-" * 160)
-    for _, r in h_df.iterrows():
-        print(f"{r['Symbol']:<20} {r['Units']:<20} {r['Price (USD)']:<12} {r['Current (USD)']:<15} {r['Curr %']:>8} {r['Tgt %']:>8} {r['Status']}")
+    try:
+        # ดึงข้อมูลจาก Action Plan ที่คำนวณไว้แล้ว
+        dca_df = generate_dca_action_report(rate)
+        
+        # กรองเอาเฉพาะตัวที่มีสัญญาณ "BUY" (รวมถึง STRONG BUY)
+        # จะได้ไม่เอาตัวที่เป็นแค่ "DCA" ธรรมดาหรือ "HOLD" มาแสดงให้รก
+        alerts = dca_df[dca_df['Action'].str.contains('BUY', na=False)]
+        
+        if not alerts.empty:
+            for _, r in alerts.iterrows():
+                action_text = str(r['Action'])
+                reason_text = str(r['Reason'])
+                # ให้ปรินต์ชื่อ Action จริงๆ ออกมาเลย แทนที่จะ Hardcode คำว่า STRONG BUY
+                print(f"{action_text:<18} : {r['Symbol']:<6} | {reason_text}")
+        else:
+            print("⚪ No aggressive BUY signals. Keep following the standard DCA plan.")
+            
+    except Exception as e:
+        print(f"⚪ Alert system paused: {str(e)}")
+        
+    print("="*165)
+    print(f"✅ Report location: ./reports/Master_Portfolio_Report.xlsx")
 
-    # --- 3. DCA Action Plan ---
-    print("\n" + "="*160 + "\n🎯 DCA ACTION PLAN\n" + "="*160)
-    dca_df = generate_dca_action_report(rate)
-    print(f"{'Symbol':<20} {'Price':<12} {'RSI':>8} {'DCA (USD)':>14} {'DCA (THB)':>14} {'Action':<18} {'Reason'}")
-    print("-" * 160)
-    for _, r in dca_df.iterrows():
-        rsi = f"{r['RSI']:.2f}" if isinstance(r['RSI'], (float, int)) else ""
-        usd = f"${r['DCA_USD']:,.2f}" if isinstance(r['DCA_USD'], (float, int)) else r['DCA_USD']
-        thb = f"฿{r['DCA_THB']:,.2f}" if isinstance(r['DCA_THB'], (float, int)) else r['DCA_THB']
-        print(f"{r['Symbol']:<20} {r['Price']:<12} {rsi:>8} {usd:>14} {thb:>14} {r['Action']:<18} {r['Reason']}")
+# ═══════════════════════════════════════════════════════
+# DISPLAY WIDTH UTILITIES
+# ═══════════════════════════════════════════════════════
 
-    # --- 4. Technical Analysis (EMA 26 & RSI) ---
-    print("\n" + "="*160 + "\n📊 TECHNICAL ANALYSIS (EMA 26 & RSI RANGING)\n" + "="*160)
-    tech_df = generate_technical_report()
-    # กำหนดความกว้างให้รองรับ Emoji และข้อความไม่ให้เบียดกัน
-    print(f"{'Symbol':<20} {'Price':<12} {'PE':<8} {'EMA(26)':<12} {'EMA Signal':<18} {'RSI':>8} {'RSI Signal':<18} {'MSig':<10} {'Growth'}")
-    print("-" * 160)
+FORCE_WIDTH2 = {
+    0x2B05, 0x2B06, 0x2B07,
+    0x27A1, 0x2194, 0x2195,
+    0x25AA, 0x25AB, 0x25B6, 0x25C0,
+}
+
+def display_width(text: str) -> int:
+    w = 0
+    for c in str(text):
+        cp = ord(c)
+        if 0xFE00 <= cp <= 0xFE0F or cp == 0x200D:
+            continue
+        if cp in FORCE_WIDTH2 or unicodedata.category(c) == "So" \
+                or 0x1F000 <= cp <= 0x1FFFF:
+            w += 2
+        elif unicodedata.east_asian_width(c) in ("W", "F"):
+            w += 2
+        else:
+            w += 1
+    return w
+
+def _rpad(text: str, width: int) -> str:
+    s = str(text)
+    return s + " " * max(0, width - display_width(s))
+
+def _lpad(text: str, width: int) -> str:
+    s = str(text)
+    return " " * max(0, width - display_width(s)) + s
+
+def _row(values, widths, aligns, sep=" ") -> str:
+    parts = []
+    for v, w, a in zip([str(x) for x in values], widths, aligns):
+        parts.append(_lpad(v, w) if a == ">" else _rpad(v, w))
+    return sep.join(parts)
+
+def debug_ema_widths(tech_df):
+    print("\n[DEBUG] EMA Signal display widths:")
     for _, r in tech_df.iterrows():
-        pe_str = str(r['PE'])
-        print(f"{r['Symbol']:<20} {r['Price']:<12} {pe_str:<8} {r['EMA26']:<12} {r['EMA_S']:<18} {r['RSI']:>8.2f} {r['RSI_S']:<18} {r['MSig']:<10} {r['Growth']}")
-    
+        s  = str(r["EMA_S"])
+        dw = display_width(s)
+        print(f"  {repr(s):<30} display_width={dw}")
+
+
+# ═══════════════════════════════════════════════════════
+# MAIN REPORT FUNCTION
+# ═══════════════════════════════════════════════════════
+def print_reports_to_console(rate: float):
+    SEP = "═" * 150   # ← define ไว้ใน function
+    DIV = "─" * 150
+    # ─────────────────────────────────────────
+    # 1. PORTFOLIO SUMMARY
+    # ─────────────────────────────────────────
+    print(f"\n{SEP}\n📋 PORTFOLIO SUMMARY\n{SEP}")
+    summary_df = generate_portfolio_summary(rate)
+    for _, row in summary_df.iterrows():
+        print(f"{row['Metric']:.<70} {row['Value']}")
+        
+    # ─────────────────────────────────────────
+    # 2. HOLDINGS REPORT
+    # ─────────────────────────────────────────
+    print(f"\n{SEP}\n💼  HOLDINGS REPORT\n{SEP}")
+    h_df = generate_holdings_report(rate)
+
+    H_COLS   = ["Symbol",  "Units", "Price (USD)", "Value (USD)", "Curr %", "Tgt %", "Status"]
+    H_WIDTHS = [ 18,        16,      14,            14,            8,         7,       12]
+    H_ALIGN  = [ "<",       "<",     "<",           "<",           ">",       ">",     "<"]
+
+    print(_row(H_COLS, H_WIDTHS, H_ALIGN))
+    print(DIV)
+    for _, r in h_df.iterrows():
+        print(_row(
+            [r["Symbol"], r["Units"], r["Price (USD)"],
+             r["Current (USD)"], r["Curr %"], r["Tgt %"], r["Status"]],
+            H_WIDTHS, H_ALIGN
+        ))
+
+    # ─────────────────────────────────────────
+    # 3. DCA ACTION PLAN
+    # ─────────────────────────────────────────
+    print(f"\n{SEP}\n🎯  DCA ACTION PLAN\n{SEP}")
+    dca_df = generate_dca_action_report(rate)
+
+    D_COLS   = ["Symbol",  "Price", "RSI", "DCA (USD)", "DCA (THB)", "Action Signal", "Reason"]
+    D_WIDTHS = [ 18,        14,      7,     14,           14,           18,              28]
+    D_ALIGN  = [ "<",       "<",     ">",   ">",          ">",          "<",             "<"]
+
+    print(_row(D_COLS, D_WIDTHS, D_ALIGN))
+    print(DIV)
+    for _, r in dca_df.iterrows():
+        rsi_v = f"{r['RSI']:.2f}"       if isinstance(r["RSI"],     (float, int)) else ""
+        usd_v = f"${r['DCA_USD']:,.2f}" if isinstance(r["DCA_USD"], (float, int)) else r["DCA_USD"]
+        thb_v = f"฿{r['DCA_THB']:,.2f}" if isinstance(r["DCA_THB"], (float, int)) else r["DCA_THB"]
+        print(_row(
+            [r["Symbol"], r["Price"], rsi_v, usd_v, thb_v, r["Action"], r["Reason"]],
+            D_WIDTHS, D_ALIGN
+        ))
+
+    # ─────────────────────────────────────────
+    # 4. TECHNICAL ANALYSIS
+    # ─────────────────────────────────────────
+    print(f"\n{SEP}\n📊  TECHNICAL ANALYSIS  (EMA 26 & RSI)\n{SEP}")
+    tech_df = generate_technical_report()
+
+    T_COLS   = ["Symbol", "Price", "PE", "EMA(26)", "EMA Signal", "RSI", "Signal RSI", "MACD", "Growth"]
+    T_WIDTHS = [20, 12, 8, 14, 20, 10, 26, 10, 10]
+    T_ALIGN  = ["<", "<", "<", ">", "<", ">", "<", "<", ">"]
+
+    print(_row(T_COLS, T_WIDTHS, T_ALIGN))
+    print(DIV)
+    for _, r in tech_df.iterrows():
+        rsi_str = f"{r['RSI']:.2f}" if isinstance(r["RSI"], (float, int)) else str(r["RSI"])
+        print(_row(
+            [r["Symbol"], r["Price"], r["PE"], r["EMA26"],
+             r["EMA_S"], rsi_str, r["RSI_S"], r["MSig"], r["Growth"]],
+            T_WIDTHS, T_ALIGN
+        ))
+
+    # ─────────────────────────────────────────
+    # 5. ACTION ALERTS
+    # ─────────────────────────────────────────
     print_action_alerts(rate)
-    
-    
+
 
 def save_all_to_excel(rate: float, output_dir: str = './reports') -> None:
     os.makedirs(output_dir, exist_ok=True)
