@@ -1,15 +1,19 @@
-project_DCA/
+smart_dca/
+├── .git/                  # 📝 Git repository
+├── .gitattributes         # Git attributes configuration
+├── .gitignore             # Git ignore rules
 ├── run.py                 # 🚀 Entry Point — รันระบบวิเคราะห์พอร์ตทั้งหมด
 │                          #    flags: (default) ใช้ disk cache / --clear-cache ลบ cache แล้ว download ใหม่
 │                          #           --no-cache ข้าม cache รอบนี้ / --no-record ข้ามบันทึก history
+├── backtest.py            # 📊 Backtesting utility module
 ├── config.py              # ⚙️ ตั้งค่าทั้งหมดของระบบ
 │                          #    - TARGET_PORTFOLIO: สัดส่วนเป้าหมาย 11 หุ้น
 │                          #      (MSFT 18%, GOOGL 14%, NVDA 6%, ASML 12%, TSM 12%,
-│                          #       GLD 13%, JNJ 5%, PG 5%, CVX 4%, RGTI 6%, QBTS 5%)
+│                          #       GC=F 13%, JNJ 5%, PG 5%, CVX 4%, RGTI 6%, QBTS 5%)
 │                          #    - CURRENT_HOLDINGS_SHARES: จำนวนหุ้นที่ถือครอง (shares)
 │                          #      ระบบดึงราคาล่าสุดจาก yfinance แล้วคำนวณมูลค่า USD อัตโนมัติ
 │                          #    - MTS_GOLD_GRAMS: จำนวนกรัมทองคำ MTS-Gold ที่ถือครอง
-│                          #      (GLD ใน TARGET_PORTFOLIO = proxy ราคาสำหรับ MTS-Gold)
+│                          #      (GC=F ใน TARGET_PORTFOLIO = proxy ราคาสำหรับ MTS-Gold)
 │                          #    - TROY_OZ_TO_GRAM: 31.1035 (ค่าคงที่แปลง oz → กรัม)
 │                          #    - MONTHLY_DCA_BUDGET_USD: งบ DCA ต่อเดือน (USD)
 │                          #    - ANNUAL_GROWTH_TARGET: เป้าหมายเติบโต 12% ต่อปี
@@ -18,25 +22,29 @@ project_DCA/
 │                          #    - REBALANCE_TOLERANCE, DEFAULT_EXCHANGE_RATE, EXCHANGE_RATE_TIMEOUT
 ├── requirements.txt       # 📋 Library ที่ใช้งาน
 │                          #    หลัก: pandas, numpy, yfinance, openpyxl, matplotlib, requests, rich
+├── README.md              # 📖 Project Documentation
+├── ProjectStructure.txt   # 📄 This file - Project structure documentation
 ├── .venv/                 # 📦 Virtual Environment
 │   ├── Include/
 │   ├── Lib/
 │   ├── Scripts/
 │   ├── .gitignore
 │   └── pyvenv.cfg
-├── data/                  # 🗄️ โฟลเดอร์เก็บ Disk Cache (สร้างอัตโนมัติ)
-│   └── cache/             #    ไฟล์ CSV ราคาหุ้นที่ download จาก yfinance
-│       ├── ASML_12mo.csv
-│       ├── CVX_12mo.csv
-│       ├── GLD_12mo.csv  #    ← ใช้เป็น proxy ราคาสำหรับ MTS-Gold ด้วย
-│       ├── GOOGL_12mo.csv
-│       ├── JNJ_12mo.csv
-│       ├── MSFT_12mo.csv
-│       ├── NVDA_12mo.csv
-│       ├── PG_12mo.csv
-│       ├── QBTS_12mo.csv
-│       ├── RGTI_12mo.csv
-│       └── TSM_12mo.csv  #    Cache valid = ไฟล์มีอยู่ + modified date ตรงกับวันนี้
+├── __pycache__/           # 🗑️ Python cache directory
+├── data/                  # 🗄️ โฟลเดอร์เก็บข้อมูลและ Disk Cache
+│   ├── dataset.py         #    📊 Data utility module
+│   └── cache/             #    ไฟล์ CSV ราคาหุ้นที่ download จาก yfinance (1 ปี)
+│       ├── ASML_1y.csv    #    Cache valid = ไฟล์มีอยู่ + modified date ตรงกับวันนี้
+│       ├── CVX_1y.csv
+│       ├── GC=F_1y.csv    #    ← ใช้เป็น proxy ราคาสำหรับ MTS-Gold ด้วย (ทองคำฟิวเจอร์)
+│       ├── GOOGL_1y.csv
+│       ├── JNJ_1y.csv
+│       ├── MSFT_1y.csv
+│       ├── NVDA_1y.csv
+│       ├── PG_1y.csv
+│       ├── QBTS_1y.csv
+│       ├── RGTI_1y.csv
+│       └── TSM_1y.csv
 ├── reports/               # 📊 โฟลเดอร์เก็บผลลัพธ์ (สร้างอัตโนมัติ)
 │   ├── Master_Portfolio_Report.xlsx  # Excel 4 sheets: Summary, Holdings, DCA_Action, Technical
 │   ├── portfolio_history.csv         # Snapshot รายวัน: date, total_usd, total_thb, rate,
