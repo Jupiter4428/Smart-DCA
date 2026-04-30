@@ -1,0 +1,1 @@
+Do not add Co-authored-by lines to commits.
