@@ -45,48 +45,22 @@ All portfolio targets, current holdings, and DCA strategy defined here.
 from datetime import date
 
 # ═══════════════════════════════════════════════════════════════════
-# TARGET PORTFOLIO ALLOCATION (%)
+# PRIVATE DATA — โหลดจาก config_private.py (ไม่ถูก push ขึ้น git)
 # ═══════════════════════════════════════════════════════════════════
-TARGET_PORTFOLIO = {
-    'MSFT' : 0.0,
-    'GOOGL': 0.0,
-    'NVDA' : 0.0,
-    'ASML' : 0.0,
-    'TSM'  : 0.0,
-    'GC=F' : 0.0,
-    'JNJ'  : 0.0,
-    'PG'   : 0.0,
-    'CVX'  : 0.0,
-    'RGTI' : 0.0,
-    'QBTS' : 0.0,
-}
+try:
+    from config_private import (
+        TARGET_PORTFOLIO,
+        CURRENT_HOLDINGS_SHARES,
+        MTS_GOLD_OZ,
+        AVERAGE_COST_USD,
+    )
+except ImportError:
+    raise SystemExit(
+        "\n❌ ไม่พบไฟล์ config_private.py\n"
+        "   คัดลอก config_private.example.py → config_private.py\n"
+        "   แล้วกรอกข้อมูลพอร์ตของคุณ\n"
+    )
 
-# ═══════════════════════════════════════════════════════════════════
-# CURRENT HOLDINGS — จำนวนหุ้น (shares)
-# ═══════════════════════════════════════════════════════════════════
-# กรอกตัวเลขจาก app ทุกครั้งที่ซื้อเพิ่ม
-# ระบบดึงราคาล่าสุดจาก yfinance แล้วคำนวณมูลค่า USD อัตโนมัติ
-CURRENT_HOLDINGS_SHARES = {
-    'MSFT' : 0.0,
-    'GOOGL': 0.0,
-    'NVDA' : 0.0,
-    'ASML' : 0.0,
-    'TSM'  : 0.0,
-    'JNJ'  : 0.0,
-    'PG'   : 0.0,
-    'CVX'  : 0.0,
-    'RGTI' : 0.0,
-    'QBTS' : 0.0,
-}
-
-# ── ทองคำ MTS-Gold ──────────────────────────────────────────────
-# MTS-GOLD ซื้อขายเป็น troy oz, ราคาอ้างอิง GLD (troy oz) จาก yfinance
-# มูลค่า (USD) = MTS_GOLD_OZ × GLD_price_per_troy_oz
-MTS_GOLD_OZ = 0.0   #   ใส่จำนวน troy oz ทองที่ถือใน MTS-Gold
-                     #     1 troy oz = 31.1035 กรัม
-                     #     ตัวอย่าง: ทอง 5 กรัม = 5 / 31.1035 ≈ 0.1608 oz
-
-# ── Validation ──────────────────────────────────────────────────
 assert MTS_GOLD_OZ >= 0, "MTS_GOLD_OZ ต้องเป็นค่า >= 0"
 
 # ═══════════════════════════════════════════════════════════════════
@@ -98,23 +72,6 @@ MONTHLY_DCA_BUDGET_USD = 45.00   # งบ DCA ต่อเดือน (USD)
 # Auto-calculate เดือนที่เหลือในปีปัจจุบัน
 _today = date.today()
 REMAINING_MONTHS = max(1, 12 - _today.month + 1)
-
-# ═══════════════════════════════════════════════════════════════════
-# AVERAGE COST (USD) — ต้นทุนเฉลี่ย
-# ═══════════════════════════════════════════════════════════════════
-AVERAGE_COST_USD = {
-    'MSFT' : 0.0,
-    'GOOGL': 0.0,
-    'NVDA' : 0.0,
-    'ASML' : 0.0,
-    'TSM'  : 0.0,
-    'GC=F' : 0.0,
-    'JNJ'  : 0.0,
-    'PG'   : 0.0,
-    'CVX'  : 0.0,
-    'RGTI' : 0.0,
-    'QBTS' : 0.0,
-}
 # ═══════════════════════════════════════════════════════════════════
 # TECHNICAL INDICATOR SETTINGS
 # ═══════════════════════════════════════════════════════════════════

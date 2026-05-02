@@ -29,8 +29,9 @@ reports/
 *.csv
 
 # ═══════════════════════════════════════════════════════════════════
-# 🔑 Secrets & Environment Variables
+# 🔑 Secrets & Private Portfolio Data
 # ═══════════════════════════════════════════════════════════════════
+config_private.py
 .env
 .env.*
 *.key
