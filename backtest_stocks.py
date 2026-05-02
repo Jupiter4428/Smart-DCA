@@ -12,7 +12,7 @@ from src.indicators import calculate_rsi, calculate_macd, calculate_ema, calcula
 from src.portfolio import calculate_rebalance_factors, get_action_signal
 
 # ═══════════════════════════════════════════════════════════════════
-# 🔧 TEST CONFIGURATION — แก้ตรงนี้เพื่อเปลี่ยนหุ้นที่ต้องการทดสอบ
+# 🔧 TEST CONFIGURATION — แก้ตรงนี้เพื่อเปลี่ยนหุ้นที่ต้องการทดสอบ 
 # ═══════════════════════════════════════════════════════════════════
 TEST_SYMBOLS = list(TARGET_PORTFOLIO.keys())   # ← เปลี่ยนเป็น list ที่ต้องการ เช่น ['MSFT', 'NVDA']
 START_DATE   = "2025-01-01"

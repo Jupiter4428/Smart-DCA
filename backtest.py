@@ -15,7 +15,7 @@ END_DATE = datetime.today().strftime('%Y-%m-%d')
 BUDGET_PER_MONTH = MONTHLY_DCA_BUDGET_USD # $45
 
 print(f"🚀 Starting Backtest Engine: {START_DATE} to {END_DATE}")
-
+ 
 # 2. โหลดข้อมูลราคาย้อนหลังทั้งหมด (ครั้งเดียวเพื่อประหยัด API)
 print("📥 Downloading historical data...")
 hist_data = {}
