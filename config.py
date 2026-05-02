@@ -56,7 +56,7 @@ try:
     )
 except ImportError:
     raise SystemExit(
-        "\n❌ ไม่พบไฟล์ config_private.py\n"
+        "\nไม่พบไฟล์ config_private.py\n"
         "   คัดลอก config_private.example.py → config_private.py\n"
         "   แล้วกรอกข้อมูลพอร์ตของคุณ\n"
     )
