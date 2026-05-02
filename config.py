@@ -45,7 +45,7 @@ All portfolio targets, current holdings, and DCA strategy defined here.
 from datetime import date
 
 # ═══════════════════════════════════════════════════════════════════
-# 🎯 TARGET PORTFOLIO ALLOCATION (%)
+# TARGET PORTFOLIO ALLOCATION (%)
 # ═══════════════════════════════════════════════════════════════════
 TARGET_PORTFOLIO = {
     'MSFT' : 0.0,
@@ -62,9 +62,9 @@ TARGET_PORTFOLIO = {
 }
 
 # ═══════════════════════════════════════════════════════════════════
-# 📦 CURRENT HOLDINGS — จำนวนหุ้น (shares)
+# CURRENT HOLDINGS — จำนวนหุ้น (shares)
 # ═══════════════════════════════════════════════════════════════════
-# ✏️  กรอกตัวเลขจาก Dime app ทุกครั้งที่ซื้อเพิ่ม
+# กรอกตัวเลขจาก app ทุกครั้งที่ซื้อเพิ่ม
 # ระบบดึงราคาล่าสุดจาก yfinance แล้วคำนวณมูลค่า USD อัตโนมัติ
 CURRENT_HOLDINGS_SHARES = {
     'MSFT' : 0.0,
@@ -82,7 +82,7 @@ CURRENT_HOLDINGS_SHARES = {
 # ── ทองคำ MTS-Gold ──────────────────────────────────────────────
 # MTS-GOLD ซื้อขายเป็น troy oz, ราคาอ้างอิง GLD (troy oz) จาก yfinance
 # มูลค่า (USD) = MTS_GOLD_OZ × GLD_price_per_troy_oz
-MTS_GOLD_OZ = 0.0   # ✏️  ใส่จำนวน troy oz ทองที่ถือใน MTS-Gold
+MTS_GOLD_OZ = 0.0   #   ใส่จำนวน troy oz ทองที่ถือใน MTS-Gold
                      #     1 troy oz = 31.1035 กรัม
                      #     ตัวอย่าง: ทอง 5 กรัม = 5 / 31.1035 ≈ 0.1608 oz
 
@@ -90,7 +90,7 @@ MTS_GOLD_OZ = 0.0   # ✏️  ใส่จำนวน troy oz ทองที�
 assert MTS_GOLD_OZ >= 0, "MTS_GOLD_OZ ต้องเป็นค่า >= 0"
 
 # ═══════════════════════════════════════════════════════════════════
-# 📊 DCA STRATEGY SETTINGS
+# DCA STRATEGY SETTINGS
 # ═══════════════════════════════════════════════════════════════════
 ANNUAL_GROWTH_TARGET   = 0.12    # เป้าหมาย 12% ต่อปี
 MONTHLY_DCA_BUDGET_USD = 45.00   # งบ DCA ต่อเดือน (USD)
@@ -100,7 +100,7 @@ _today = date.today()
 REMAINING_MONTHS = max(1, 12 - _today.month + 1)
 
 # ═══════════════════════════════════════════════════════════════════
-# 💰 AVERAGE COST (USD) — ต้นทุนเฉลี่ย
+# AVERAGE COST (USD) — ต้นทุนเฉลี่ย
 # ═══════════════════════════════════════════════════════════════════
 AVERAGE_COST_USD = {
     'MSFT' : 0.0,
@@ -116,7 +116,7 @@ AVERAGE_COST_USD = {
     'QBTS' : 0.0,
 }
 # ═══════════════════════════════════════════════════════════════════
-# 🔧 TECHNICAL INDICATOR SETTINGS
+# TECHNICAL INDICATOR SETTINGS
 # ═══════════════════════════════════════════════════════════════════
 RSI_PERIOD     = 14
 RSI_OVERSOLD   = 30
@@ -127,20 +127,24 @@ MACD_SIGNAL    = 9
 DATA_PERIOD    = "1y"
 
 # ═══════════════════════════════════════════════════════════════════
-# ⚙️ REBALANCING SETTINGS
+# REBALANCING SETTINGS
 # ═══════════════════════════════════════════════════════════════════
 REBALANCE_TOLERANCE  = 0.5
 MIN_REBALANCE_FACTOR = 0.3
 MAX_REBALANCE_FACTOR = 1.5
 
+# ── Volatility-Adjusted DCA ──────────────────────────────────────
+VOL_WINDOW  = 20    # rolling window (trading days)
+VOL_DCA_CAP = 1.50  # hard cap: multiplier = 1 + vol/2, never exceed 1.5×
+
 # ═══════════════════════════════════════════════════════════════════
-# 💱 CURRENCY SETTINGS
+# CURRENCY SETTINGS
 # ═══════════════════════════════════════════════════════════════════
 DEFAULT_EXCHANGE_RATE = 33.5
 EXCHANGE_RATE_TIMEOUT = 5
 
 # ═══════════════════════════════════════════════════════════════════
-# 📋 DISPLAY SETTINGS
+# DISPLAY SETTINGS
 # ═══════════════════════════════════════════════════════════════════
 SHOW_EMOJI     = True
 DECIMAL_PLACES = 2

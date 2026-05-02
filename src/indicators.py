@@ -249,3 +249,20 @@ def calculate_historical_growth(df):
 def calculate_ema(series, period=26):
     """คำนวณ Exponential Moving Average"""
     return series.ewm(span=period, adjust=False).mean()
+
+
+def calculate_volatility(close_price: pd.Series, window: int = 20) -> float:
+    """
+    Calculate annualised volatility from daily log returns.
+
+    Args:
+        close_price (Series): Series of closing prices
+        window (int): Rolling window in trading days (default 20)
+
+    Returns:
+        float: Annualised volatility (e.g. 0.25 = 25%), or 0.0 if insufficient data
+    """
+    if len(close_price) < window + 1:
+        return 0.0
+    log_returns = np.log(close_price / close_price.shift(1)).dropna()
+    return float(log_returns.iloc[-window:].std() * np.sqrt(252))

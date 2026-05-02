@@ -115,11 +115,6 @@ def print_portfolio_status(target_portfolio, current_holdings, total_value, exch
     print(f"{'TOTAL':<8} | ฿{total_value:<14,.2f} | ${total_value_usd:<14,.2f} | {total_current/total_value*100:>8.2f}% | {'100.00':>8}% |")
     print(f"{'='*140}\n")
     
-from config import REBALANCE_TOLERANCE, RSI_OVERSOLD, RSI_OVERBOUGHT
-from src.utils import get_status_indicator
-
-from config import RSI_OVERSOLD, RSI_OVERBOUGHT
-
 def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value, macd_val=None, signal_val=None, price=None, ema26=None):
     """
     Generate Action Signals with Full Risk Management, Robust None-handling, and Signal Priority.

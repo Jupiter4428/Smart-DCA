@@ -5,13 +5,15 @@ smart_dca/
 ├── run.py                 # 🚀 Entry Point — รันระบบวิเคราะห์พอร์ตทั้งหมด
 │                          #    flags: (default) ใช้ disk cache / --clear-cache ลบ cache แล้ว download ใหม่
 │                          #           --no-cache ข้าม cache รอบนี้ / --no-record ข้ามบันทึก history
+│                          #           --dry-run แสดงผล console เท่านั้น ไม่บันทึกไฟล์ใดเลย
 ├── backtest.py            # 📊 Backtesting utility module
 ├── config.py              # ⚙️ ตั้งค่าทั้งหมดของระบบ
 │                          #    - TARGET_PORTFOLIO: สัดส่วนเป้าหมาย 11 หุ้น
-│                          #      (MSFT 18%, GOOGL 14%, NVDA 6%, ASML 12%, TSM 12%,
-│                          #       GC=F 13%, JNJ 5%, PG 5%, CVX 4%, RGTI 6%, QBTS 5%)
+│                          #      (MSFT 20%, GOOGL 15%, NVDA 12%, ASML 12%, TSM 12%,
+│                          #       GC=F 7%, JNJ 3%, PG 2%, CVX 3%, RGTI 7%, QBTS 7%)
 │                          #    - CURRENT_HOLDINGS_SHARES: จำนวนหุ้นที่ถือครอง (shares)
 │                          #      ระบบดึงราคาล่าสุดจาก yfinance แล้วคำนวณมูลค่า USD อัตโนมัติ
+│                          #    - AVERAGE_COST_USD: ต้นทุนเฉลี่ยต่อหุ้น/oz ใช้คำนวณ P&L
 │                          #    - MTS_GOLD_GRAMS: จำนวนกรัมทองคำ MTS-Gold ที่ถือครอง
 │                          #      (GC=F ใน TARGET_PORTFOLIO = proxy ราคาสำหรับ MTS-Gold)
 │                          #    - TROY_OZ_TO_GRAM: 31.1035 (ค่าคงที่แปลง oz → กรัม)
@@ -20,6 +22,7 @@ smart_dca/
 │                          #    - REMAINING_MONTHS: เดือนที่เหลือในปี (คำนวณอัตโนมัติ)
 │                          #    - RSI_PERIOD/OVERSOLD/OVERBOUGHT, MACD_FAST/SLOW/SIGNAL, DATA_PERIOD
 │                          #    - REBALANCE_TOLERANCE, DEFAULT_EXCHANGE_RATE, EXCHANGE_RATE_TIMEOUT
+│                          #    - VOL_WINDOW (20), VOL_HIGH_THRESHOLD (0.25), VOL_DCA_CAP (1.50)
 ├── requirements.txt       # 📋 Library ที่ใช้งาน
 │                          #    หลัก: pandas, numpy, yfinance, openpyxl, matplotlib, requests, rich
 ├── README.md              # 📖 Project Documentation
@@ -46,16 +49,19 @@ smart_dca/
 │       ├── RGTI_1y.csv
 │       └── TSM_1y.csv
 ├── reports/               # 📊 โฟลเดอร์เก็บผลลัพธ์ (สร้างอัตโนมัติ)
-│   ├── Master_Portfolio_Report.xlsx  # Excel 4 sheets: Summary, Holdings, DCA_Action, Technical
+│   ├── Master_Portfolio_Report.xlsx  # Excel 5 sheets: Summary, Holdings, DCA_Action, Technical, PnL
 │   ├── portfolio_history.csv         # Snapshot รายวัน: date, total_usd, total_thb, rate,
-│   │                                 #   monthly_dca_usd, gold_grams, <SYMBOL_USD>...
-│   ├── portfolio_performance.png     # Chart: Portfolio Value / Holdings Breakdown / DCA Budget
+│   │                                 #   monthly_dca_usd, gold_oz, total_invested_usd, <SYMBOL_USD>...
+│   ├── portfolio_performance.png     # Chart: Portfolio Value / Holdings Breakdown / DCA Budget / Exchange Rate
 │   └── backtest_result.png           # Chart: Backtesting results visualization
 └── src/                   # 🧠 Source Code หลัก
     ├── indicators.py      # 📈 Technical Indicators + Disk Cache Manager
     │                      #    - download_historical_data(symbol, period): download + cache อัตโนมัติ
     │                      #    - calculate_rsi(close, period=14): Wilder's Smoothing RSI
     │                      #    - calculate_macd(close, fast=12, slow=26, signal=9): MACD + Signal line
+    │                      #    - calculate_ema(series, period=26): Exponential Moving Average
+    │                      #    - calculate_volatility(close, window=20): Annualised vol จาก log returns
+    │                      #    - calculate_historical_growth(df): % total return จาก cache
     │                      #    - get_latest_indicators(symbol): คืน dict {rsi, macd, signal}
     │                      #    - analyze_trend(rsi, macd, signal): คืน string Bullish/Bearish + emoji
     │                      #    - clear_disk_cache(): ลบ CSV ทั้งหมดใน data/cache/
@@ -63,7 +69,8 @@ smart_dca/
     │                      #    - calculate_rebalance_factors(): คำนวณ weight สำหรับ underweight/overweight
     │                      #    - get_rebalance_status(symbol, ...): ดึงสถานะ rebalance ของหุ้นตัวเดียว
     │                      #    - print_portfolio_status(...): แสดงตาราง rebalance ใน console
-    │                      #    - get_action_signal(current_pct, target_pct, rsi): คืน BUY/SELL/SKIP/HOLD/DCA + เหตุผล
+    │                      #    - get_action_signal(...): คืน BUY/SELL/SKIP/HOLD/DCA + เหตุผล
+    │                      #      พร้อม Risk Management: EMA26, P/E, Extreme Downtrend protection
     ├── utils.py           # 🔧 Utility Functions
     │                      #    - get_thb_usd_rate(): ดึง rate จาก yfinance → exchangerate-api → default fallback
     │                      #    - validate_portfolio_weights(portfolio): ตรวจ weights รวม = 100%
@@ -72,19 +79,32 @@ smart_dca/
     │                      #    - get_status_indicator(diff_pct, tolerance): คืน On Target / OVERWEIGHT / UNDERWEIGHT
     │                      #    - print_section / print_subsection: print header สวยงาม
     ├── output.py          # 📊 Console & Excel Report Generator
+    │                      #    — Helpers (private) —
     │                      #    - _get_current_holdings_usd(): คำนวณมูลค่า USD จาก shares × latest_price
-    │                      #      (GLD → MTS-Gold proxy: grams / 31.1035 × GLD_price_per_oz)
-    │                      #    - get_cached_indicators(symbol): ดึง indicators พร้อม in-memory cache
+    │                      #    - _get_total_portfolio_usd(): รวมมูลค่าพอร์ตทั้งหมด
+    │                      #    - _calculate_portfolio_volatility(): weighted annualised vol ทั้งพอร์ต
+    │                      #    - _get_adjusted_dca_budget(): งบ DCA ที่ปรับตาม vol (Proportional Scaling)
+    │                      #      vol > VOL_HIGH_THRESHOLD → multiplier = 1 + (vol−0.25)×2, capped at 1.50×
+    │                      #    - _calculate_total_invested_usd(): ต้นทุนรวมจาก AVERAGE_COST_USD × shares
+    │                      #    — Indicator Cache —
+    │                      #    - get_cached_indicators(symbol): ดึง {rsi, macd, signal, price, df, vol}
     │                      #    - print_cache_summary(): แสดงสรุป cache hit/miss เป็นบรรทัดเดียว
-    │                      #    - generate_portfolio_summary(rate): ตาราง metrics ภาพรวม + gold_grams
-    │                      #    - generate_holdings_report(rate): ตาราง shares/กรัม, ราคา, current vs target
-    │                      #    - generate_dca_action_report(rate): ตาราง DCA recommendation + action signal
-    │                      #    - generate_technical_report(): ตาราง RSI, MACD, Signal ทุกหุ้น
+    │                      #    — Report Generators —
+    │                      #    - generate_portfolio_summary(rate): metrics ภาพรวม + vol-adjusted budget
+    │                      #      + total_invested, goal progress %, est. months to goal
+    │                      #    - generate_holdings_report(rate): shares/oz, ราคา, current vs target
+    │                      #      + Avg Cost, P&L (USD), P&L (%) ต่อ symbol
+    │                      #    - generate_dca_action_report(rate): DCA recommendation + action signal
+    │                      #      ใช้งบ vol-adjusted แทน MONTHLY_DCA_BUDGET_USD คงที่
+    │                      #    - generate_technical_report(): RSI, MACD, EMA26, Vol ทุกหุ้น
+    │                      #    — Output —
     │                      #    - print_reports_to_console(rate): แสดงรายงานทั้งหมดใน terminal
-    │                      #    - save_all_to_excel(rate, output_dir): บันทึก Excel 4 sheets พร้อม color highlight
-    │                      #    - append_performance_history(rate): บันทึก snapshot รายวัน → portfolio_history.csv
-    ├── visualize.py       # 📈 Performance Chart Generator
-    │                      #    - visualize_performance_history(): อ่าน portfolio_history.csv
-    │                      #      สร้าง 3-panel chart: Total Value / Holdings Breakdown / DCA Budget
-    │                      #      บันทึกเป็น reports/portfolio_performance.png
-    └── __pycache__/       # 🗑️ Python cache directory
+    │                      #    - save_all_to_excel(rate, output_dir): บันทึก Excel 5 sheets
+    │                      #      (Summary, Holdings, DCA_Action, Technical, PnL) พร้อม color highlight
+    │                      #    - append_performance_history(rate): บันทึก snapshot รายวัน
+    │                      #      → portfolio_history.csv (รวม total_invested_usd, migration-safe)
+    └── visualize.py       # 📈 Performance Chart Generator
+                           #    - visualize_performance_history(): อ่าน portfolio_history.csv
+                           #      สร้าง 4-panel chart: Total Value / Holdings Breakdown /
+                           #      DCA Budget / Exchange Rate (THB/USD)
+                           #      บันทึกเป็น reports/portfolio_performance.png

@@ -22,14 +22,17 @@ from config import (
     RSI_OVERSOLD,
     RSI_OVERBOUGHT,
     AVERAGE_COST_USD,
-    ANNUAL_GROWTH_TARGET  # <--- เพิ่มตัวนี้
+    ANNUAL_GROWTH_TARGET,
+    VOL_WINDOW,
+    VOL_DCA_CAP,
 )
 from src.indicators import (
-    download_historical_data, 
-    calculate_rsi, 
-    calculate_macd, 
+    download_historical_data,
+    calculate_rsi,
+    calculate_macd,
     calculate_historical_growth,
-    calculate_ema  # <-- เพิ่มคำนี้เข้าไป
+    calculate_ema,
+    calculate_volatility,
 )
 from src.utils import get_status_indicator
 from src.portfolio import get_action_signal, calculate_rebalance_factors
@@ -49,7 +52,7 @@ def get_cached_pe(symbol):
     try:
         pe = yf.Ticker(symbol).info.get('trailingPE', "N/A")
         PE_CACHE[symbol] = round(pe, 2) if isinstance(pe, (float, int)) else "N/A"
-    except:
+    except Exception:
         PE_CACHE[symbol] = "N/A"
     return PE_CACHE[symbol]
 
@@ -86,6 +89,7 @@ def get_cached_indicators(symbol: str) -> dict | None:
                     'signal': float(signal_series.iloc[-1]),
                     'price' : float(close.iloc[-1]),
                     'df'    : df,
+                    'vol'   : calculate_volatility(close, VOL_WINDOW),
                 }
 
         if was_cached:
@@ -131,6 +135,36 @@ def _get_current_holdings_usd() -> dict[str, float]:
 def _get_total_portfolio_usd(holdings_usd: dict[str, float]) -> float:
     return sum(holdings_usd.values())
 
+
+def _calculate_portfolio_volatility() -> float:
+    total_weight = sum(TARGET_PORTFOLIO.values())
+    weighted_vol = 0.0
+    for symbol, pct in TARGET_PORTFOLIO.items():
+        ind = get_cached_indicators(symbol)
+        if ind and 'vol' in ind:
+            weighted_vol += (pct / total_weight) * ind['vol']
+    return weighted_vol
+
+
+def _get_adjusted_dca_budget() -> float:
+    port_vol = _calculate_portfolio_volatility()
+    multiplier = min(1 + port_vol / 2, VOL_DCA_CAP)
+    return MONTHLY_DCA_BUDGET_USD * multiplier
+
+
+def _calculate_total_invested_usd() -> float:
+    total = 0.0
+    for symbol in TARGET_PORTFOLIO:
+        avg_cost = AVERAGE_COST_USD.get(symbol, 0.0)
+        if avg_cost <= 0:
+            continue
+        if symbol == 'GC=F':
+            total += avg_cost * MTS_GOLD_OZ
+        else:
+            total += avg_cost * CURRENT_HOLDINGS_SHARES.get(symbol, 0.0)
+    return total
+
+
 # ─────────────────────────────────────────────────────────────────
 # Report Generators
 # ─────────────────────────────────────────────────────────────────
@@ -153,6 +187,12 @@ def generate_portfolio_summary(rate: float) -> pd.DataFrame:
     # กัน error กรณี denominator = 0
     req_dca_usd = (target_end_usd - fv_current) / denominator if denominator > 0 else 0
 
+    adj_budget         = _get_adjusted_dca_budget()
+    port_vol           = _calculate_portfolio_volatility()
+    total_invested_usd = _calculate_total_invested_usd()
+    progress_pct       = (total_usd / target_end_usd * 100) if target_end_usd > 0 else 0.0
+    months_to_goal     = (target_end_usd - total_usd) / adj_budget if adj_budget > 0 and target_end_usd > total_usd else 0.0
+
     gcf_ind = get_cached_indicators('GC=F')
     gcf_price_str = f"${gcf_ind['price']:,.2f}/oz" if gcf_ind else "N/A"
     gold_usd = holdings_usd.get('GC=F', 0.0)
@@ -164,9 +204,13 @@ def generate_portfolio_summary(rate: float) -> pd.DataFrame:
             'Exchange Rate (THB/USD)',
             'Annual Growth Target (Config)',
             'Monthly DCA Budget (USD / THB)',
+            'Volatility-Adjusted DCA Budget',
             'Remaining Months',
             'Target End Year Value (USD / THB)',
             'Required Monthly DCA (USD / THB)',
+            'Total Invested (Cost Basis)',
+            'Goal Progress',
+            'Est. Months to Goal',
             'Gold Holdings',
         ],
         'Value': [
@@ -175,9 +219,13 @@ def generate_portfolio_summary(rate: float) -> pd.DataFrame:
             f"{rate:.2f}",
             f"{annual_target * 100:.2f}%",
             f"${MONTHLY_DCA_BUDGET_USD:,.2f}  /  ฿{MONTHLY_DCA_BUDGET_USD * rate:,.2f}",
+            f"${adj_budget:,.2f}  /  ฿{adj_budget * rate:,.2f}  (port vol: {port_vol * 100:.1f}%)",
             REMAINING_MONTHS,
             f"${target_end_usd:,.2f}  /  ฿{target_end_thb:,.2f}",
             f"${req_dca_usd:,.2f}  /  ฿{req_dca_usd * rate:,.2f}",
+            f"${total_invested_usd:,.2f}",
+            f"{progress_pct:.1f}%  (${total_usd:,.2f} / ${target_end_usd:,.2f})",
+            f"{months_to_goal:.1f} months  (at adj. DCA rate)",
             f"{MTS_GOLD_OZ:.6f} oz  |  {gcf_price_str}  |  ${gold_usd:,.2f}",
         ]
     }
@@ -199,10 +247,20 @@ def generate_holdings_report(rate: float) -> pd.DataFrame:
         price_str = f"${ind['price']:,.2f}" if ind else "N/A"
 
         if symbol == 'GC=F':
-            units_str = f"{MTS_GOLD_OZ:.6f} oz"
+            units_str  = f"{MTS_GOLD_OZ:.6f} oz"
+            cost_basis = AVERAGE_COST_USD.get(symbol, 0.0) * MTS_GOLD_OZ
         else:
-            units = CURRENT_HOLDINGS_SHARES.get(symbol, 0.0)
-            units_str = f"{units:.7f} shares"
+            units      = CURRENT_HOLDINGS_SHARES.get(symbol, 0.0)
+            units_str  = f"{units:.7f} shares"
+            cost_basis = AVERAGE_COST_USD.get(symbol, 0.0) * units
+
+        avg_cost = AVERAGE_COST_USD.get(symbol, 0.0)
+        pnl_usd  = val_usd - cost_basis if avg_cost > 0 else 0.0
+        pnl_pct  = (pnl_usd / cost_basis * 100) if cost_basis > 0 else 0.0
+
+        avg_cost_str = f"${avg_cost:,.2f}" if avg_cost > 0 else "—"
+        pnl_usd_str  = f"${pnl_usd:+,.2f}" if avg_cost > 0 else "—"
+        pnl_pct_str  = f"{pnl_pct:+.2f}%"  if avg_cost > 0 else "—"
 
         rows.append({
             'Symbol'       : _display_name(symbol),
@@ -212,6 +270,9 @@ def generate_holdings_report(rate: float) -> pd.DataFrame:
             'Curr %'       : f"{pct:.2f}%",
             'Tgt %'        : f"{target_pct:.2f}%",
             'Status'       : status,
+            'Avg Cost'     : avg_cost_str,
+            'P&L (USD)'    : pnl_usd_str,
+            'P&L (%)'      : pnl_pct_str,
         })
     return pd.DataFrame(rows)
 
@@ -230,6 +291,7 @@ def generate_dca_action_report(rate: float) -> pd.DataFrame:
         exchange_rate    = 1.0,
     )
 
+    _adj_budget = _get_adjusted_dca_budget()
     rows = []
     symbol_actions = {}
     for symbol, target_pct in TARGET_PORTFOLIO.items():
@@ -265,7 +327,7 @@ def generate_dca_action_report(rate: float) -> pd.DataFrame:
     total_dca_usd = 0.0
     for symbol in TARGET_PORTFOLIO:
         data = symbol_actions[symbol]
-        final_usd = (MONTHLY_DCA_BUDGET_USD * (rebalance_factors[symbol] / f_sum)) if symbol in eligible_symbols and f_sum > 0 else 0.0
+        final_usd = (_adj_budget * (rebalance_factors[symbol] / f_sum)) if symbol in eligible_symbols and f_sum > 0 else 0.0
         total_dca_usd += final_usd
         
         rows.append({
@@ -279,7 +341,7 @@ def generate_dca_action_report(rate: float) -> pd.DataFrame:
         })
     
     df = pd.DataFrame(rows)
-    rem = max(0.0, MONTHLY_DCA_BUDGET_USD - total_dca_usd)
+    rem = max(0.0, _adj_budget - total_dca_usd)
     df.loc[len(df)] = ['TOTAL', 'N/A', None, total_dca_usd, total_dca_usd * rate, 'REM CASH:', f"${rem:.2f}"]
     return df
 
@@ -318,14 +380,15 @@ def generate_technical_report() -> pd.DataFrame:
             rsi_sig = "Neutral 🔵"         # Normal range (Hold/DCA)
 
         rows.append({
-            'Symbol': _display_name(symbol), 
-            'Price': f"${close_price:,.2f}", 
+            'Symbol': _display_name(symbol),
+            'Price': f"${close_price:,.2f}",
             'PE': get_cached_pe(symbol),
             'EMA26': f"${ema26:,.2f}",
             'EMA_S': ema_status,
-            'RSI': round(rsi_val, 2), 
+            'RSI': round(rsi_val, 2),
             'RSI_S': rsi_sig,
             'MSig': "Bull 🟢" if ind['macd'] > ind['signal'] else "Bear 🔴",
+            'Vol': f"{ind.get('vol', 0.0) * 100:.1f}%",
             'Growth': f"{calculate_historical_growth(df)*100:+.2f}%"
         })
     return pd.DataFrame(rows)
@@ -428,16 +491,17 @@ def print_reports_to_console(rate: float):
     print(f"\n{SEP}\n💼  HOLDINGS REPORT\n{SEP}")
     h_df = generate_holdings_report(rate)
 
-    H_COLS   = ["Symbol",  "Units", "Price (USD)", "Value (USD)", "Curr %", "Tgt %", "Status"]
-    H_WIDTHS = [ 18,        16,      14,            14,            8,         7,       12]
-    H_ALIGN  = [ "<",       "<",     "<",           "<",           ">",       ">",     "<"]
+    H_COLS   = ["Symbol",  "Units", "Price (USD)", "Value (USD)", "Curr %", "Tgt %", "Status",  "Avg Cost", "P&L (USD)", "P&L (%)"]
+    H_WIDTHS = [ 18,        16,      14,            14,            8,         7,       12,         12,          13,           10]
+    H_ALIGN  = [ "<",       "<",     "<",           "<",           ">",       ">",     "<",        ">",         ">",          ">"]
 
     print(_row(H_COLS, H_WIDTHS, H_ALIGN))
     print(DIV)
     for _, r in h_df.iterrows():
         print(_row(
             [r["Symbol"], r["Units"], r["Price (USD)"],
-             r["Current (USD)"], r["Curr %"], r["Tgt %"], r["Status"]],
+             r["Current (USD)"], r["Curr %"], r["Tgt %"], r["Status"],
+             r["Avg Cost"], r["P&L (USD)"], r["P&L (%)"]],
             H_WIDTHS, H_ALIGN
         ))
 
@@ -468,9 +532,9 @@ def print_reports_to_console(rate: float):
     print(f"\n{SEP}\n📊  TECHNICAL ANALYSIS  (EMA 26 & RSI)\n{SEP}")
     tech_df = generate_technical_report()
 
-    T_COLS   = ["Symbol", "Price", "PE", "EMA(26)", "EMA Signal", "RSI", "Signal RSI", "MACD", "Growth"]
-    T_WIDTHS = [20, 12, 8, 14, 20, 10, 26, 10, 10]
-    T_ALIGN  = ["<", "<", "<", ">", "<", ">", "<", "<", ">"]
+    T_COLS   = ["Symbol", "Price", "PE", "EMA(26)", "EMA Signal", "RSI", "RSI Signal", "MACD", "Vol",  "Growth"]
+    T_WIDTHS = [20,        12,      8,    14,         20,           10,    20,            10,     8,      10]
+    T_ALIGN  = ["<",       "<",     "<",  ">",        "<",          ">",   "<",           "<",    ">",    ">"]
 
     print(_row(T_COLS, T_WIDTHS, T_ALIGN))
     print(DIV)
@@ -478,7 +542,7 @@ def print_reports_to_console(rate: float):
         rsi_str = f"{r['RSI']:.2f}" if isinstance(r["RSI"], (float, int)) else str(r["RSI"])
         print(_row(
             [r["Symbol"], r["Price"], r["PE"], r["EMA26"],
-             r["EMA_S"], rsi_str, r["RSI_S"], r["MSig"], r["Growth"]],
+             r["EMA_S"], rsi_str, r["RSI_S"], r["MSig"], r["Vol"], r["Growth"]],
             T_WIDTHS, T_ALIGN
         ))
 
@@ -494,9 +558,13 @@ def save_all_to_excel(rate: float, output_dir: str = './reports') -> None:
 
     with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
         generate_portfolio_summary(rate).to_excel(writer, sheet_name='Summary',    index=False)
-        generate_holdings_report(rate).to_excel(  writer, sheet_name='Holdings',   index=False)
+        holdings_df = generate_holdings_report(rate)
+        holdings_df.to_excel(                      writer, sheet_name='Holdings',   index=False)
         generate_dca_action_report(rate).to_excel( writer, sheet_name='DCA_Action', index=False)
         generate_technical_report().to_excel(      writer, sheet_name='Technical',  index=False)
+        holdings_df[['Symbol', 'Units', 'Price (USD)', 'Avg Cost', 'Current (USD)', 'P&L (USD)', 'P&L (%)']].to_excel(
+            writer, sheet_name='PnL', index=False
+        )
 
         wb          = writer.book
         green_fill  = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
@@ -511,7 +579,7 @@ def save_all_to_excel(rate: float, output_dir: str = './reports') -> None:
                 )
                 ws.column_dimensions[get_column_letter(col[0].column)].width = min(max(length + 2, min_w), max_w)
 
-        for sheet_name in ['Summary', 'Holdings', 'DCA_Action', 'Technical']:
+        for sheet_name in ['Summary', 'Holdings', 'DCA_Action', 'Technical', 'PnL']:
             _auto_width(wb[sheet_name])
 
         ws_dca = wb['DCA_Action']
@@ -546,6 +614,17 @@ def save_all_to_excel(rate: float, output_dir: str = './reports') -> None:
                 elif 'On Target' in val:
                     cell.fill = green_fill
 
+        ws_pnl = wb['PnL']
+        pnl_col = next((cell.column for cell in ws_pnl[1] if cell.value == 'P&L (USD)'), None)
+        if pnl_col:
+            for row in range(2, ws_pnl.max_row + 1):
+                cell = ws_pnl.cell(row=row, column=pnl_col)
+                try:
+                    val = float(str(cell.value).replace('$', '').replace(',', '').replace('+', ''))
+                    cell.fill = green_fill if val >= 0 else red_fill
+                except (ValueError, TypeError):
+                    pass
+
     print(f"✅ Master Portfolio Report saved: {excel_file}")
 
 def append_performance_history(rate: float) -> None:
@@ -556,17 +635,29 @@ def append_performance_history(rate: float) -> None:
     total_usd    = _get_total_portfolio_usd(holdings_usd)
 
     row: dict = {
-        'date'           : today,
-        'total_usd'      : round(total_usd, 4),
-        'total_thb'      : round(total_usd * rate, 2),
-        'rate'           : round(rate, 4),
-        'monthly_dca_usd': MONTHLY_DCA_BUDGET_USD,
-        'gold_oz'        : MTS_GOLD_OZ,
+        'date'              : today,
+        'total_usd'         : round(total_usd, 4),
+        'total_thb'         : round(total_usd * rate, 2),
+        'rate'              : round(rate, 4),
+        'monthly_dca_usd'   : MONTHLY_DCA_BUDGET_USD,
+        'gold_oz'           : MTS_GOLD_OZ,
+        'total_invested_usd': round(_calculate_total_invested_usd(), 4),
     }
     for sym, val in holdings_usd.items():
         row[sym] = round(val, 4)
 
-    fieldnames = list(row.keys())
+    if os.path.exists(history_file):
+        try:
+            existing_cols = pd.read_csv(history_file, nrows=0).columns.tolist()
+            if 'total_invested_usd' not in existing_cols:
+                df_hist = pd.read_csv(history_file)
+                df_hist['total_invested_usd'] = pd.NA
+                df_hist.to_csv(history_file, index=False)
+            fieldnames = pd.read_csv(history_file, nrows=0).columns.tolist()
+        except Exception:
+            fieldnames = list(row.keys())
+    else:
+        fieldnames = list(row.keys())
     if os.path.exists(history_file):
         try:
             df_existing = pd.read_csv(history_file, usecols=['date'])
