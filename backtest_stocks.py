@@ -15,7 +15,7 @@ from src.portfolio import calculate_rebalance_factors, get_action_signal
 # 🔧 TEST CONFIGURATION — แก้ตรงนี้เพื่อเปลี่ยนหุ้นที่ต้องการทดสอบ
 # ═══════════════════════════════════════════════════════════════════
 TEST_SYMBOLS = list(TARGET_PORTFOLIO.keys())   # ← เปลี่ยนเป็น list ที่ต้องการ เช่น ['MSFT', 'NVDA']
-START_DATE   = "2021-01-01"
+START_DATE   = "2025-01-01"
 END_DATE     = datetime.today().strftime('%Y-%m-%d')
 COLS         = 3   # จำนวนคอลัมน์ในกราฟ grid
 

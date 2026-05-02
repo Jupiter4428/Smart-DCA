@@ -10,7 +10,7 @@ from src.portfolio import calculate_rebalance_factors, get_action_signal
 import numpy as np  
 
 # 1. ตั้งค่าพารามิเตอร์ Backtest
-START_DATE = "2021-01-01"  # ย้อนหลังกลับไปช่วงตลาดกระทิงและหมี
+START_DATE = "2025-01-01"  # ย้อนหลังกลับไปช่วงตลาดกระทิงและหมี
 END_DATE = datetime.today().strftime('%Y-%m-%d')
 BUDGET_PER_MONTH = MONTHLY_DCA_BUDGET_USD # $45
 
