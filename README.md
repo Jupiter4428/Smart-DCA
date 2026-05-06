@@ -251,7 +251,7 @@ Example: 5g = 5 ÷ 31.1035 ≈ 0.160754 oz
 | `VOL_HIGH_THRESHOLD` | `0.25` | Annualised vol above this triggers DCA scale-up |
 | `VOL_DCA_CAP` | `1.50` | Maximum DCA budget multiplier |
 
----
+--- 
 
 ## Monthly Workflow
 
