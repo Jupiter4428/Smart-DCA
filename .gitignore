@@ -32,6 +32,7 @@ reports/
 # 🔑 Secrets & Private Portfolio Data
 # ═══════════════════════════════════════════════════════════════════
 config_private.py
+config_private.example.py
 .env
 .env.*
 *.key
