@@ -121,6 +121,10 @@ def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value, macd
     Designed for Smart-DCA Portfolio (Wutthisak Boonkan).
     """
     
+    # 🔴 0. EXIT Position: ถูกนำออกจาก TARGET_PORTFOLIO แต่ยังถือครอง → ต้องขาย
+    if target_pct == 0 and current_pct > 0:
+        return "SELL 🔴", "Exit Position (Removed from portfolio — please sell)"
+
     # 🔵 1. จัดการสินทรัพย์พิเศษ (Hedge Asset)
     # ทองคำทำหน้าที่เป็นประกันความเสี่ยง จึงเน้นวินัยการซื้อ (Disciplined DCA) ไม่ใช้กฎการขายอัตโนมัติ
     if symbol in ['GC=F', 'GLD']:

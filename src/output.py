@@ -117,6 +117,13 @@ def clear_indicator_cache() -> None:
 def _display_name(symbol: str) -> str:
     return f"{symbol} (MTS-Gold)" if symbol == 'GC=F' else symbol
 
+def _get_legacy_symbols() -> list[str]:
+    """หุ้นที่ยังถือครองแต่ถูกนำออกจาก TARGET_PORTFOLIO (รอขาย/exit)."""
+    return [
+        sym for sym, shares in CURRENT_HOLDINGS_SHARES.items()
+        if sym not in TARGET_PORTFOLIO and shares > 0
+    ]
+
 def _get_current_holdings_usd() -> dict[str, float]:
     holdings_usd: dict[str, float] = {}
     for symbol in TARGET_PORTFOLIO:
@@ -130,6 +137,11 @@ def _get_current_holdings_usd() -> dict[str, float]:
                 holdings_usd[symbol] = shares * (ind['price'] if ind else 0.0)
             else:
                 holdings_usd[symbol] = 0.0
+    # Legacy holdings: ยังถือครองแต่ไม่อยู่ใน TARGET_PORTFOLIO
+    for symbol in _get_legacy_symbols():
+        shares = CURRENT_HOLDINGS_SHARES[symbol]
+        ind = get_cached_indicators(symbol)
+        holdings_usd[symbol] = shares * (ind['price'] if ind else 0.0)
     return holdings_usd
 
 def _get_total_portfolio_usd(holdings_usd: dict[str, float]) -> float:
@@ -154,7 +166,8 @@ def _get_adjusted_dca_budget() -> float:
 
 def _calculate_total_invested_usd() -> float:
     total = 0.0
-    for symbol in TARGET_PORTFOLIO:
+    all_symbols = list(TARGET_PORTFOLIO.keys()) + _get_legacy_symbols()
+    for symbol in all_symbols:
         avg_cost = AVERAGE_COST_USD.get(symbol, 0.0)
         if avg_cost <= 0:
             continue
@@ -274,6 +287,32 @@ def generate_holdings_report(rate: float) -> pd.DataFrame:
             'P&L (USD)'    : pnl_usd_str,
             'P&L (%)'      : pnl_pct_str,
         })
+
+    # Legacy holdings: ยังถือครองแต่ถูกนำออกจาก TARGET_PORTFOLIO → ต้องขาย
+    for symbol in _get_legacy_symbols():
+        val_usd   = holdings_usd.get(symbol, 0.0)
+        pct       = (val_usd / total_usd * 100) if total_usd > 0 else 0.0
+        ind       = get_cached_indicators(symbol)
+        price_str = f"${ind['price']:,.2f}" if ind else "N/A"
+        units     = CURRENT_HOLDINGS_SHARES.get(symbol, 0.0)
+        units_str = f"{units:.7f} shares"
+        avg_cost  = AVERAGE_COST_USD.get(symbol, 0.0)
+        cost_basis = avg_cost * units
+        pnl_usd   = val_usd - cost_basis if avg_cost > 0 else 0.0
+        pnl_pct   = (pnl_usd / cost_basis * 100) if cost_basis > 0 else 0.0
+        rows.append({
+            'Symbol'       : f"{symbol} ⚠️EXIT",
+            'Units'        : units_str,
+            'Price (USD)'  : price_str,
+            'Current (USD)': f"${val_usd:,.2f}",
+            'Curr %'       : f"{pct:.2f}%",
+            'Tgt %'        : "0.00%",
+            'Status'       : "EXIT 🔴",
+            'Avg Cost'     : f"${avg_cost:,.2f}" if avg_cost > 0 else "—",
+            'P&L (USD)'    : f"${pnl_usd:+,.2f}" if avg_cost > 0 else "—",
+            'P&L (%)'      : f"{pnl_pct:+.2f}%" if avg_cost > 0 else "—",
+        })
+
     return pd.DataFrame(rows)
 
 
@@ -340,6 +379,22 @@ def generate_dca_action_report(rate: float) -> pd.DataFrame:
             'Reason': data['reason']
         })
     
+    # Legacy holdings: ถือครองแต่ไม่อยู่ใน TARGET_PORTFOLIO → ไม่จัดสรร DCA, แสดง SELL signal
+    for symbol in _get_legacy_symbols():
+        ind   = get_cached_indicators(symbol)
+        price = ind['price'] if ind else 0.0
+        rsi   = ind['rsi'] if ind else None
+        curr_pct = (holdings_usd.get(symbol, 0.0) / total_usd * 100) if total_usd > 0 else 0.0
+        rows.append({
+            'Symbol': f"{symbol} ⚠️EXIT",
+            'Price' : f"${price:,.2f}",
+            'RSI'   : rsi,
+            'DCA_USD': 0.0,
+            'DCA_THB': 0.0,
+            'Action': "SELL 🔴",
+            'Reason': f"Exit Position — removed from portfolio (holding {curr_pct:.1f}%)",
+        })
+
     df = pd.DataFrame(rows)
     rem = max(0.0, _adj_budget - total_dca_usd)
     df.loc[len(df)] = ['TOTAL', 'N/A', None, total_dca_usd, total_dca_usd * rate, 'REM CASH:', f"${rem:.2f}"]
@@ -351,7 +406,8 @@ def generate_dca_action_report(rate: float) -> pd.DataFrame:
 def generate_technical_report() -> pd.DataFrame:
     """สร้างรายงาน Technical Analysis: RSI Ranging + EMA 26 Support"""
     rows = []
-    for symbol in TARGET_PORTFOLIO:
+    all_symbols = list(TARGET_PORTFOLIO.keys()) + _get_legacy_symbols()
+    for symbol in all_symbols:
         ind = get_cached_indicators(symbol)
         if not ind: continue
         
@@ -379,8 +435,10 @@ def generate_technical_report() -> pd.DataFrame:
         else:
             rsi_sig = "Neutral 🔵"         # Normal range (Hold/DCA)
 
+        is_legacy = symbol in _get_legacy_symbols()
+        label = f"{symbol} ⚠️EXIT" if is_legacy else _display_name(symbol)
         rows.append({
-            'Symbol': _display_name(symbol),
+            'Symbol': label,
             'Price': f"${close_price:,.2f}",
             'PE': get_cached_pe(symbol),
             'EMA26': f"${ema26:,.2f}",
@@ -649,9 +707,13 @@ def append_performance_history(rate: float) -> None:
     if os.path.exists(history_file):
         try:
             existing_cols = pd.read_csv(history_file, nrows=0).columns.tolist()
-            if 'total_invested_usd' not in existing_cols:
+            new_cols = [k for k in row.keys() if k not in existing_cols]
+            if new_cols or 'total_invested_usd' not in existing_cols:
                 df_hist = pd.read_csv(history_file)
-                df_hist['total_invested_usd'] = pd.NA
+                if 'total_invested_usd' not in existing_cols:
+                    df_hist['total_invested_usd'] = pd.NA
+                for col in new_cols:
+                    df_hist[col] = pd.NA
                 df_hist.to_csv(history_file, index=False)
             fieldnames = pd.read_csv(history_file, nrows=0).columns.tolist()
         except Exception:
@@ -669,7 +731,7 @@ def append_performance_history(rate: float) -> None:
 
     file_exists = os.path.exists(history_file)
     with open(history_file, 'a', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, restval='', extrasaction='ignore')
         if not file_exists:
             writer.writeheader()
         writer.writerow(row)
