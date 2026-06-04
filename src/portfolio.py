@@ -118,10 +118,11 @@ def print_portfolio_status(target_portfolio, current_holdings, total_value, exch
 def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value, macd_val=None, signal_val=None, price=None, ema26=None):
     """
     Generate Action Signals with Full Risk Management, Robust None-handling, and Signal Priority.
+    Optimized for Long-term Trend Following with Flexible Take Profit.
     Designed for Smart-DCA Portfolio (Wutthisak Boonkan).
     """
     
-    # 🔴 0. EXIT Position: ถูกนำออกจาก TARGET_PORTFOLIO แต่ยังถือครอง → ต้องขาย
+    # 🔴 0. EXIT Position: ถูกนำออกจาก TARGET_PORTFOLIO แต่ยังถือครอง → ต้องขายล้างพอร์ต
     if target_pct == 0 and current_pct > 0:
         return "SELL 🔴", "Exit Position (Removed from portfolio — please sell)"
 
@@ -131,10 +132,9 @@ def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value, macd
         return "DCA 🔵", "Hedge asset (Disciplined Buy)"
 
     # 🛠️ 2. การดักจับค่า None และการคำนวณพื้นฐาน (Defensive Logic)
-    # ป้องกัน Error กรณีข้อมูลจาก API มาไม่ครบ
     diff = (current_pct - target_pct) if (current_pct is not None and target_pct is not None) else 0
     is_underweight = diff < -0.5
-    is_overweight = diff > 2.0 # สัดส่วนเกินเป้าหมายเกิน 2% เริ่มเข้าข่าย Overweight
+    is_overweight = diff > 2.0 
 
     # ตรวจสอบ Technical Indicators (Default เป็น False หากไม่มีข้อมูล)
     is_oversold = (rsi_value <= RSI_OVERSOLD) if rsi_value is not None else False
@@ -143,13 +143,16 @@ def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value, macd
     
     # 📏 3. Risk Metric: Volatility & Support Check (EMA 26)
     at_ema_support = False
-    price_extreme_drop = False # สัญญาณอันตราย: ราคาหลุดแนวรับสำคัญรุนแรง
+    price_extreme_drop = False # สัญญาณอันตราย: ราคาหลุดแนวรับสำคัญรุนแรง (Panic Sell / Trend Change)
+    is_ema_bullish = False     # สัญญาณยืนยันแนวโน้มขาขึ้นระยะยาว
     
     if all(v is not None for v in [price, ema26]) and ema26 > 0:
         diff_ema = ((price - ema26) / ema26) * 100
-        # ช่วงพักฐานที่เหมาะสม (-2% ถึง 5% จากเส้น EMA26)
+        # ช่วงพักฐานที่เหมาะสมใกล้เส้น EMA26 (-2% ถึง 5% จากเส้น EMA26)
         at_ema_support = -2 <= diff_ema <= 5
-        # Risk Management: หากราคาต่ำกว่า EMA26 เกิน 10% ถือว่าผิดปกติ (Panic/Trend Change)
+        # ราคายังอยู่เหนือแนวรับ EMA26 ยืนยันแนวโน้มฝั่งขาขึ้น
+        is_ema_bullish = diff_ema > 0
+        # Risk Management: หากราคาต่ำกว่า EMA26 เกิน 10% ถือว่าผิดปกติ คาดว่าเปลี่ยนแนวโน้มเป็นขาลง
         if diff_ema < -10:
             price_extreme_drop = True
 
@@ -174,18 +177,35 @@ def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value, macd
     # 🎯 5. การตัดสินใจตามลำดับความสำคัญ (Decision Hierarchy)
 
     # --- [A] RISK FIRST: CAPITAL PROTECTION ---
-    # หากราคาร่วงรุนแรงผิดปกติ ให้หยุดซื้อเพื่อรอดูสถานการณ์ (Preserve Cash)
+    # หากราคาร่วงรุนแรงผิดปกติ หลุดแนวรับสำคัญ ให้หยุดซื้อเพื่อรอดูสถานการณ์ (Preserve Cash)
     if price_extreme_drop and not macd_bullish:
         return "HOLD 🟡", "Extreme Downtrend (Stop DCA & Preserve Cash)"
 
-    # --- [B] CASE: UNDERWEIGHT (พอร์ตยังขาดหุ้นตัวนี้) ---
-    if is_underweight:
+    # --- [B] CASE: OVERWEIGHT (พอร์ตบวมเกินเป้า) ---
+    # ปรับปรุง Logic ฝั่งขาย/หยุดซื้อ ให้สอดคล้องกับสายรันเทรนด์ระยะยาวแต่ยืดหยุ่น
+    if is_overweight:
+        # กลยุทธ์ที่ 1: ตลาดตึงตัวขั้นสุด พอร์ตบวมมากและ RSI พุ่งสูงเกินไป ให้แบ่ง Take Profit ออกมาบางส่วน
+        if is_overbought and diff > 5.0:
+            return "SELL 🔴", "Extreme Overweight + Overbought (Take Profit / Lock Profit)"
+        
+        # กลยุทธ์ที่ 2: แม้พอร์ตจะบวม แต่เทรนด์ภาพรวมยังเป็นขาขึ้นแข็งแกร่ง (เหนือ EMA26 + MACD คอนเฟิร์ม) 
+        # ให้สิทธิ์ขยายเพดานเพื่อ "ถือทนรวย" ปล่อยให้วินัย DCA ทำงานต่อไปแทนการกด HOLD ทันที
+        if is_ema_bullish and macd_bullish and not is_overbought:
+            return "DCA 🔵", "Overweight but Strong Bullish Trend (Let Profits Run with DCA)"
+        
+        # กลยุทธ์ที่ 3: หุ้นเริ่มหมดแรง (ราคาแพง/Overbought) และโมเมนตัมเทคนิคัลเริ่มหักหัวลง ให้หยุดเติมเงิน
+        if (is_expensive or is_overbought) and not macd_bullish:
+            return "HOLD ⚪", "Risk Reduction: Overvalued/Overbought Trend Weakening (Stop DCA)"
+            
+        return "HOLD ⚪", "Overweight (Redirect DCA funds to Underweight assets)"
+    
+    # --- [C] CASE: UNDERWEIGHT (พอร์ตยังขาดหุ้นตัวนี้) ---
+    elif is_underweight:
         # Anti-FOMO: แม้สัดส่วนจะขาด แต่ถ้าราคาวิ่งแรงจน Overbought ให้รอย่อตัวก่อน
         if is_expensive or is_overbought:
             return "BUY 🟡", "Underweight but Overbought/Expensive (Wait for Dip)"
         
         # 🟢🟢 STRONG BUY: จุดเข้าซื้อที่ความเสี่ยงต่ำและมีพลังส่งสูง
-        # เงื่อนไข: (ต้องมีโมเมนตัม) และ (ต้องถูกหรือ Oversold) และ (ต้องไม่ Overbought)[cite: 1]
         if (macd_bullish or at_ema_support) and (is_cheap or is_oversold) and not is_overbought:
             return "STRONG BUY 🟢🟢", "Undervalued/Oversold + Bullish Momentum"
         
@@ -196,18 +216,6 @@ def get_action_signal(symbol, current_pct, target_pct, rsi_value, pe_value, macd
             return "BUY 🟢", "Accumulate (Undervalued or Oversold)"
             
         return "BUY 🟡", "Accumulate (Underweight, Neutral Trend)"
-    
-    # --- [C] CASE: OVERWEIGHT (พอร์ตบวมเกินเป้า) ---
-    elif is_overweight:
-        # Profit Harvesting: ขายทำกำไรเมื่อบวมมาก (>5%) และราคาร้อนแรงสุดขีด[cite: 1]
-        if is_overbought and diff > 5.0:
-            return "SELL 🔴", "Extreme Overweight + Overbought (Take Profit)"
-        
-        # Risk Reduction: หยุดเติมเงินในหุ้นที่แพงหรือ Overbought[cite: 1]
-        if (is_expensive or is_overbought) and not macd_bullish:
-            return "HOLD ⚪", "Risk Reduction: Overvalued (Wait for Rebalance)"
-            
-        return "HOLD ⚪", "Overweight (Redirect DCA funds to Underweight assets)"
     
     # --- [D] CASE: ON TARGET (สัดส่วนพอร์ตสมดุล) ---
     else:

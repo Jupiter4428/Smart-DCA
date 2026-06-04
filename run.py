@@ -74,6 +74,9 @@ if __name__ == "__main__":
         else:
             append_performance_history(rate)
 
-        visualize_performance_history()
+        if "--plot" in args:
+            visualize_performance_history()
+        else:
+            print("⏭️  Skipping performance chart generation (use --plot to enable)")
 
     print("\n✨ All tasks completed successfully!")
